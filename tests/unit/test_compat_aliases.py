@@ -220,6 +220,20 @@ class TestWaterHeaterCompatMixin:
         s.get_boost_status.assert_called_once_with(d)
         assert result == "OFF"
 
+    async def test_camelcase_get_boost_delegates_to_get_boost_status(self):
+        """getBoost delegates to get_boost_status and returns its result."""
+
+        class Stub(WaterHeaterCompatMixin):
+            """Stub with mocked get_boost_status."""
+
+            get_boost_status = AsyncMock(return_value="ON")
+
+        s = Stub()
+        d = _make_device()
+        result = await s.getBoost(d)
+        s.get_boost_status.assert_called_once_with(d)
+        assert result == "ON"
+
     async def test_set_mode_delegates(self):
         """setMode delegates to set_mode."""
 

@@ -32,9 +32,65 @@ class HeatingCompatMixin:
         """Backwards-compatible alias for set_boost_off."""
         return await self.set_boost_off(device)  # type: ignore[attr-defined]
 
+    async def setHeatOnDemand(self, device: Device, state: str):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for set_heat_on_demand."""
+        return await self.set_heat_on_demand(device, state)  # type: ignore[attr-defined]
+
     async def getClimate(self, device: Device):  # pylint: disable=invalid-name
         """Backwards-compatible alias for get_climate."""
         return await self.get_climate(device)  # type: ignore[attr-defined]
+
+    async def getMinTemperature(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_min_temperature."""
+        return await self.get_min_temperature(device)  # type: ignore[attr-defined]
+
+    async def getMaxTemperature(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_max_temperature."""
+        return await self.get_max_temperature(device)  # type: ignore[attr-defined]
+
+    async def getCurrentTemperature(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_current_temperature."""
+        return await self.get_current_temperature(device)  # type: ignore[attr-defined]
+
+    async def getTargetTemperature(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_target_temperature."""
+        return await self.get_target_temperature(device)  # type: ignore[attr-defined]
+
+    async def getMode(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_mode."""
+        return await self.get_mode(device)  # type: ignore[attr-defined]
+
+    async def getState(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_state."""
+        return await self.get_state(device)  # type: ignore[attr-defined]
+
+    async def getCurrentOperation(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_current_operation."""
+        return await self.get_current_operation(device)  # type: ignore[attr-defined]
+
+    async def getBoostStatus(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_boost_status."""
+        return await self.get_boost_status(device)  # type: ignore[attr-defined]
+
+    async def getBoostTime(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_boost_time."""
+        return await self.get_boost_time(device)  # type: ignore[attr-defined]
+
+    async def getHeatOnDemand(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_heat_on_demand."""
+        return await self.get_heat_on_demand(device)  # type: ignore[attr-defined]
+
+    async def getOperationModes(self):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_operation_modes."""
+        return await self.get_operation_modes()  # type: ignore[attr-defined]
+
+    async def getScheduleNowNextLater(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_schedule_now_next_later."""
+        return await self.get_schedule_now_next_later(device)  # type: ignore[attr-defined]
+
+    async def minmaxTemperature(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for minmax_temperature."""
+        return await self.minmax_temperature(device)  # type: ignore[attr-defined]
 
 
 class LightCompatMixin:
@@ -56,6 +112,34 @@ class LightCompatMixin:
         """Backwards-compatible alias for get_light."""
         return await self.get_light(device)  # type: ignore[attr-defined]
 
+    async def getState(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_state."""
+        return await self.get_state(device)  # type: ignore[attr-defined]
+
+    async def getBrightness(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_brightness."""
+        return await self.get_brightness(device)  # type: ignore[attr-defined]
+
+    async def getMinColorTemp(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_min_color_temp."""
+        return await self.get_min_color_temp(device)  # type: ignore[attr-defined]
+
+    async def getMaxColorTemp(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_max_color_temp."""
+        return await self.get_max_color_temp(device)  # type: ignore[attr-defined]
+
+    async def getColorTemp(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_color_temp."""
+        return await self.get_color_temp(device)  # type: ignore[attr-defined]
+
+    async def getColor(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_color."""
+        return await self.get_color(device)  # type: ignore[attr-defined]
+
+    async def getColorMode(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_color_mode."""
+        return await self.get_color_mode(device)  # type: ignore[attr-defined]
+
 
 class SwitchCompatMixin:
     """CamelCase aliases for Switch (plug) public methods."""
@@ -72,13 +156,33 @@ class SwitchCompatMixin:
         """Backwards-compatible alias for get_switch."""
         return await self.get_switch(device)  # type: ignore[attr-defined]
 
+    async def getState(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_state."""
+        return await self.get_state(device)  # type: ignore[attr-defined]
+
+    async def getPowerUsage(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_power_usage."""
+        return await self.get_power_usage(device)  # type: ignore[attr-defined]
+
+    async def getSwitchState(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_switch_state."""
+        return await self.get_switch_state(device)  # type: ignore[attr-defined]
+
 
 class WaterHeaterCompatMixin:
     """CamelCase aliases for WaterHeater (hotwater) public methods."""
 
-    async def get_boost(self, device: Device):  # pylint: disable=invalid-name
+    async def get_boost(self, device: Device):
+        """Alias for get_boost_status, used by the Hotwater_Boost sensor."""
+        return await self.get_boost_status(device)  # type: ignore[attr-defined]
+
+    async def getBoost(self, device: Device):  # pylint: disable=invalid-name
         """Backwards-compatible alias for get_boost_status."""
         return await self.get_boost_status(device)  # type: ignore[attr-defined]
+
+    async def getBoostTime(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_boost_time."""
+        return await self.get_boost_time(device)  # type: ignore[attr-defined]
 
     async def setMode(self, device: Device, new_mode: str):  # pylint: disable=invalid-name
         """Backwards-compatible alias for set_mode."""
@@ -96,13 +200,33 @@ class WaterHeaterCompatMixin:
         """Backwards-compatible alias for get_water_heater."""
         return await self.get_water_heater(device)  # type: ignore[attr-defined]
 
+    async def getMode(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_mode."""
+        return await self.get_mode(device)  # type: ignore[attr-defined]
 
-class SensorCompatMixin:  # pylint: disable=too-few-public-methods
+    async def getState(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_state."""
+        return await self.get_state(device)  # type: ignore[attr-defined]
+
+    async def getOperationModes(self):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_operation_modes."""
+        return await self.get_operation_modes()  # type: ignore[attr-defined]
+
+    async def getScheduleNowNextLater(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_schedule_now_next_later."""
+        return await self.get_schedule_now_next_later(device)  # type: ignore[attr-defined]
+
+
+class SensorCompatMixin:
     """CamelCase aliases for Sensor public methods."""
 
     async def getSensor(self, device: Device):  # pylint: disable=invalid-name
         """Backwards-compatible alias for get_sensor."""
         return await self.get_sensor(device)  # type: ignore[attr-defined]
+
+    async def getState(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_state."""
+        return await self.get_state(device)  # type: ignore[attr-defined]
 
 
 class ActionCompatMixin:
@@ -119,6 +243,26 @@ class ActionCompatMixin:
     async def setStatusOff(self, device: Device):  # pylint: disable=invalid-name
         """Backwards-compatible alias for set_status_off."""
         return await self.set_status_off(device)  # type: ignore[attr-defined]
+
+    async def getState(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_state."""
+        return await self.get_state(device)  # type: ignore[attr-defined]
+
+
+class HubCompatMixin:
+    """CamelCase aliases for HiveHub public methods."""
+
+    async def getSmokeStatus(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_smoke_status."""
+        return await self.get_smoke_status(device)  # type: ignore[attr-defined]
+
+    async def getDogBarkStatus(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_dog_bark_status."""
+        return await self.get_dog_bark_status(device)  # type: ignore[attr-defined]
+
+    async def getGlassBreakStatus(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_glass_break_status."""
+        return await self.get_glass_break_status(device)  # type: ignore[attr-defined]
 
 
 class SessionCompatMixin:
