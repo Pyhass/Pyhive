@@ -4,7 +4,9 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from apyhiveapi.api.hive_api import HiveApi
+from apyhiveapi.helper.hive_exceptions import HiveConnectionError
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -197,15 +199,30 @@ class TestGetLoginInfo:
         # REGION mirrors UPID
         assert result["REGION"] == "eu-west-1_abc"
 
-    def test_os_error_calls_error_and_returns_none(self):
+    def test_os_error_calls_error_and_raises_connection_error(self):
         api = _make_api()
-        with patch(
-            "apyhiveapi.api.hive_api.requests.get", side_effect=OSError("net error")
+        with (
+            patch(
+                "apyhiveapi.api.hive_api.requests.get",
+                side_effect=OSError("net error"),
+            ),
+            pytest.raises(HiveConnectionError),
         ):
-            result = api.get_login_info()
+            api.get_login_info()
 
-        assert result is None
         assert api.json_return["original"] == "Error making API call"
+
+    def test_timeout_raises_connection_error(self):
+        """A read timeout on the SSO page is transient, so it must not return None."""
+        api = _make_api()
+        with (
+            patch(
+                "apyhiveapi.api.hive_api.requests.get",
+                side_effect=requests.exceptions.ReadTimeout("read timed out"),
+            ),
+            pytest.raises(HiveConnectionError),
+        ):
+            api.get_login_info()
 
     def test_runtime_error_calls_error_and_returns_none(self):
         api = _make_api()

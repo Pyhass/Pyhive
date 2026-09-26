@@ -17,6 +17,7 @@ import botocore
 
 from ..helper.hive_exceptions import (
     HiveApiError,
+    HiveConnectionError,
     HiveFailedToRefreshTokens,
     HiveInvalid2FACode,
     HiveInvalidDeviceAuthentication,
@@ -495,7 +496,7 @@ class HiveAuthAsync(DeviceRegistrationMixin):
             _LOGGER.error(
                 "refresh_token - Token refresh failed: cannot reach Cognito endpoint."
             )
-            raise HiveApiError from err
+            raise HiveConnectionError from err
 
         _LOGGER.debug("refresh_token - Cognito token refresh completed successfully.")
         return result

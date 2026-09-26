@@ -59,6 +59,16 @@ class HiveFailedToRefreshTokens(HiveApiError):
     """
 
 
+class HiveConnectionError(HiveApiError):
+    """Hive could not be reached (timeout or network error).
+
+    The failure is expected to be transient, so callers can retry.
+
+    Args:
+        HiveApiError (object): Parent API error class
+    """
+
+
 class HiveConfigurationError(HiveError):
     """Base class for configuration-related errors.
 

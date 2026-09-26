@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ..helper.const import DEVICES, EXPECTED_DEVICE_DATA_LENGTH, HIVE_TYPES, PRODUCTS
-from ..helper.hive_exceptions import HiveUnknownConfiguration
+from ..helper.hive_exceptions import HiveConnectionError, HiveUnknownConfiguration
 from ..helper.hivedataclasses import Device
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
@@ -165,9 +165,13 @@ class DiscoveryMixin:
             if not self.config.file and "tokens" not in config:
                 raise HiveUnknownConfiguration
 
-        await self.get_devices("No_ID")  # type: ignore[attr-defined]
+        fetched = await self.get_devices("No_ID")  # type: ignore[attr-defined]
 
         if not self.data.devices or not self.data.products:
+            if not fetched:
+                # The request failed rather than returning an empty account,
+                # so let the caller retry instead of treating it as bad config.
+                raise HiveConnectionError("Could not fetch devices from Hive")
             _LOGGER.error("No devices or products returned from Hive API.")
             raise HiveUnknownConfiguration
 

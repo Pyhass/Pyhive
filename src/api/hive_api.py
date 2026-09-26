@@ -7,6 +7,8 @@ import re
 import requests
 from pyquery import PyQuery
 
+from ..helper.hive_exceptions import HiveConnectionError
+
 _LOGGER = logging.getLogger(__name__)
 
 _NO_RESPONSE = "No response to Hive API request"
@@ -121,7 +123,12 @@ class HiveApi:
             }
             _LOGGER.debug("get_login_info - Login info extracted successfully")
             return login_data
-        except (OSError, RuntimeError, KeyError) as e:
+        except OSError as e:
+            # requests' timeouts and connection errors are OSError subclasses.
+            _LOGGER.error("Failed to get login info: %s", str(e))
+            self.error()
+            raise HiveConnectionError("Could not reach the Hive login page") from e
+        except (RuntimeError, KeyError) as e:
             _LOGGER.error("Failed to get login info: %s", str(e))
             self.error()
             return None
