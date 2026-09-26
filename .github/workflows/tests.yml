@@ -58,10 +58,16 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Build distributions
+      # verify_dist.py installs the wheel, which pulls pyquery -> lxml. Match the
+      # tests job so a Python version without prebuilt lxml wheels can still build.
+      - name: Install build dependencies
         run: |
+          sudo apt-get update && sudo apt-get install -y \
+            libxml2-dev libxslt1-dev python3-dev build-essential
           python -m pip install build
-          python -m build
+
+      - name: Build distributions
+        run: python -m build
 
       # The test suite runs against src/ via an editable install, so it cannot
       # see packaging mistakes. This installs the built wheel in a clean venv
