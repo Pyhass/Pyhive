@@ -23,6 +23,9 @@ jobs:
           python -m pip install build
           python -m build
 
+      - name: Verify built distribution is importable
+        run: python scripts/verify_dist.py dist
+
       - name: Upload wheel to GitHub Release
         uses: ncipollo/release-action@v1
         with:
