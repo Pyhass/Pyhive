@@ -192,6 +192,42 @@ class HiveApiAsync:
             return {"original": "file"}
         return await self._call_endpoint("put", url, data=data)
 
+    async def get_holiday_mode(self):
+        """Get the current holiday mode configuration."""
+        return await self._call_endpoint("get", self.urls["holiday_mode"])
+
+    async def set_holiday_mode(self, start: int, end: int, temperature: float):
+        """Schedule holiday mode.
+
+        Args:
+            start: Start time as epoch milliseconds.
+            end: End time as epoch milliseconds.
+            temperature: Frost-protection temperature to hold during holiday mode.
+        """
+        _LOGGER.debug(
+            "set_holiday_mode - Scheduling holiday mode from %s to %s at %s°.",
+            start,
+            end,
+            temperature,
+        )
+        jsc = json.dumps({"start": start, "end": end, "temperature": temperature})
+        try:
+            await self.is_file_being_used()
+        except FileInUse:
+            return {"original": "file"}
+        return await self._call_endpoint("post", self.urls["holiday_mode"], data=jsc)
+
+    async def cancel_holiday_mode(self):
+        """Cancel any scheduled or active holiday mode."""
+        _LOGGER.debug("cancel_holiday_mode - Cancelling holiday mode.")
+        try:
+            await self.is_file_being_used()
+        except FileInUse:
+            return {"original": "file"}
+        return await self._call_endpoint(
+            "delete", self.urls["holiday_mode"], data=json.dumps({})
+        )
+
     async def error(self):
         """An error has occurred interacting with the Hive API."""
         _LOGGER.error("HTTP error occurred during Hive API interaction.")

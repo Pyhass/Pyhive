@@ -120,7 +120,14 @@ class TestRequest:
     def test_unsupported_method_raises_value_error(self):
         api = _make_api()
         with pytest.raises(ValueError, match="Unsupported request type"):
+            api.request("PATCH", "https://example.com/")
+
+    def test_delete_method_calls_requests_delete(self):
+        api = _make_api()
+        with patch("apyhiveapi.api.hive_api.requests.delete") as mock_delete:
+            mock_delete.return_value = _make_mock_response(200)
             api.request("DELETE", "https://example.com/")
+            mock_delete.assert_called_once()
 
     def test_exception_is_reraised(self):
         api = _make_api()
@@ -630,6 +637,62 @@ class TestSetAction:
             api.set_action("act-1", "{}")
 
         assert api.json_return["original"] == "Error making API call"
+
+
+# ---------------------------------------------------------------------------
+# Tests: HiveApi holiday mode
+# ---------------------------------------------------------------------------
+
+
+class TestHolidayMode:
+    def test_get_holiday_mode_returns_parsed_json(self):
+        api = _make_api()
+        payload = {
+            "active": False,
+            "enabled": False,
+            "start": 1783006500000,
+            "end": 1783296000000,
+            "temperature": 12,
+            "status": "OK",
+        }
+        mock_resp = _make_mock_response(200, json_data=payload)
+
+        with patch.object(api, "request", return_value=mock_resp):
+            result = api.get_holiday_mode()
+
+        assert result["original"] == 200
+        assert result["parsed"] == payload
+
+    def test_set_holiday_mode_posts_epoch_ms_body(self):
+        api = _make_api()
+        payload = {"start": 1783767707701, "end": 1784372507701, "temperature": 12}
+        mock_resp = _make_mock_response(200, json_data=payload)
+
+        with patch.object(api, "request", return_value=mock_resp) as mock_req:
+            result = api.set_holiday_mode(1783767707701, 1784372507701, 12)
+
+        assert result["original"] == 200
+        assert result["parsed"] == payload
+        method_arg = mock_req.call_args[0][0]
+        jsc_arg = mock_req.call_args[0][2]
+        assert method_arg == "POST"
+        assert json.loads(jsc_arg) == {
+            "start": 1783767707701,
+            "end": 1784372507701,
+            "temperature": 12,
+        }
+
+    def test_cancel_holiday_mode_sends_delete(self):
+        api = _make_api()
+        mock_resp = _make_mock_response(200, json_data={"set": True})
+
+        with patch.object(api, "request", return_value=mock_resp) as mock_req:
+            result = api.cancel_holiday_mode()
+
+        assert result["original"] == 200
+        assert result["parsed"] == {"set": True}
+        method_arg = mock_req.call_args[0][0]
+        assert method_arg == "DELETE"
 
 
 # ---------------------------------------------------------------------------
