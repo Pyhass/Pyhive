@@ -33,9 +33,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Pyhive/pyhiveapi"
-Source = "https://github.com/Pyhive/Pyhiveapi"
-"Issue Tracker" = "https://github.com/Pyhive/Pyhiveapi/issues"
+Homepage = "https://github.com/Pyhass/Pyhive"
+Source = "https://github.com/Pyhass/Pyhive"
+"Issue Tracker" = "https://github.com/Pyhass/Pyhive/issues"
 
 [project.optional-dependencies]
 dev = [

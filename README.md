@@ -1,6 +1,6 @@
 # pyhive-integration
 
-![CI](https://github.com/Pyhive/Pyhiveapi/actions/workflows/ci.yml/badge.svg) ![PyPI](https://img.shields.io/pypi/v/pyhive-integration) ![Python](https://img.shields.io/pypi/pyversions/pyhive-integration) ![License](https://img.shields.io/github/license/Pyhive/Pyhiveapi)
+![CI](https://github.com/Pyhass/Pyhive/actions/workflows/ci.yml/badge.svg) ![PyPI](https://img.shields.io/pypi/v/pyhive-integration) ![Python](https://img.shields.io/pypi/pyversions/pyhive-integration) ![License](https://img.shields.io/github/license/Pyhass/Pyhive)
 
 A Python library for interfacing with the [Hive](https://www.hivehome.com/) smart home platform. Provides both async (`apyhiveapi`) and sync (`pyhiveapi`) APIs, and is designed primarily for use with [Home Assistant](https://www.home-assistant.io/) — though it works standalone too.
 
@@ -175,11 +175,11 @@ python setup.py build_py
 ## Links
 
 - [PyPI](https://pypi.org/project/pyhive-integration/)
-- [Source](https://github.com/Pyhive/Pyhiveapi)
-- [Issue Tracker](https://github.com/Pyhive/Pyhiveapi/issues)
+- [Source](https://github.com/Pyhass/Pyhive)
+- [Issue Tracker](https://github.com/Pyhass/Pyhive/issues)
 
 ---
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](https://github.com/Pyhass/Pyhive/blob/master/LICENSE) for details.

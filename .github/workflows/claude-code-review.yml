@@ -6,7 +6,11 @@ on:
 
 jobs:
   claude-review:
-    if: github.event.pull_request.draft == false
+    # Fork PRs get no secrets or OIDC token on `pull_request`, so the action
+    # cannot authenticate there — skip them (use @claude via claude.yml instead).
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -26,10 +30,19 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
             Review this pull request for the pyhive-integration Python library. Check for:
             - Correctness: logic errors, incorrect async/await usage, blocking calls in async context
             - Type annotations: missing or incorrect types on public methods
             - Security: no secrets in code, safe HTTP and Cognito API call patterns
             - Style: snake_case naming, no unused imports, ruff/pylint compliance
             - Tests: are new features or bug fixes covered by tests?
-            Post inline comments on specific lines where relevant. Be concise.
+
+            Use `gh pr diff` and `gh pr view` to inspect the changes.
+            Post inline comments on specific lines with
+            mcp__github_inline_comment__create_inline_comment, then post a short
+            overall summary with `gh pr comment`. Be concise.
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep"
