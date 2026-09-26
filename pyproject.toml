@@ -53,7 +53,23 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["apyhiveapi", "apyhiveapi.api", "apyhiveapi.helper", "pyhive", "pyhive.api", "pyhive.helper"]
+# Keep this list in sync with the package directories under src/. It is explicit
+# rather than auto-discovered because package-dir maps two distribution names
+# (apyhiveapi, pyhive) onto the same source tree, which find: cannot express.
+# The sync flavour (pyhiveapi) is generated at build time by the unasync
+# build_py cmdclass in setup.py and so is not listed here.
+packages = [
+    "apyhiveapi",
+    "apyhiveapi.api",
+    "apyhiveapi.devices",
+    "apyhiveapi.helper",
+    "apyhiveapi.session",
+    "pyhive",
+    "pyhive.api",
+    "pyhive.devices",
+    "pyhive.helper",
+    "pyhive.session",
+]
 
 [tool.setuptools.package-dir]
 apyhiveapi = "src"
