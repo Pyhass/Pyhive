@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from apyhiveapi.helper.hive_exceptions import (
+    HiveConnectionError,
     HiveReauthRequired,
     HiveUnknownConfiguration,
 )
@@ -351,6 +352,27 @@ class TestStartSessionWrongException:
         assert not isinstance(exc_info.value, HiveReauthRequired), (
             "HiveReauthRequired must not be raised for empty device list"
         )
+
+
+class TestStartSessionFetchFailed:
+    """A failed device fetch is a transient error, not an unknown configuration."""
+
+    async def test_failed_fetch_raises_connection_error(self):
+        """start_session raises HiveConnectionError when get_devices fails."""
+        s = _make_stub(has_data=False)
+        s.get_devices = AsyncMock(return_value=False)
+
+        with pytest.raises(HiveConnectionError):
+            await s.start_session({})
+
+    async def test_failed_fetch_with_cached_data_still_creates_devices(self):
+        """Data already loaded is used even if this fetch failed."""
+        s = _make_stub(has_data=True)
+        s.get_devices = AsyncMock(return_value=False)
+
+        result = await s.start_session({})
+
+        assert result is s.device_list
 
 
 # ---------------------------------------------------------------------------

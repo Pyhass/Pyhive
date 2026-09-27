@@ -6,7 +6,15 @@ on:
 
 jobs:
   claude-review:
-    if: github.event.pull_request.draft == false
+    # Skip:
+    # - drafts
+    # - fork PRs: `pull_request` runs from forks get no secrets or OIDC token,
+    #   so the action cannot authenticate (use @claude via claude.yml instead)
+    # - release PRs into master: huge aggregate diffs of already-reviewed work
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref != 'master'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -18,7 +26,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          # Full history so Claude can `git diff` locally when the PR is too
+          # large for the GitHub diff API (>20k lines).
+          fetch-depth: 0
 
       - name: Run Claude Code Review
         id: claude-review
@@ -26,10 +36,122 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            Review this pull request for the pyhive-integration Python library. Check for:
-            - Correctness: logic errors, incorrect async/await usage, blocking calls in async context
-            - Type annotations: missing or incorrect types on public methods
-            - Security: no secrets in code, safe HTTP and Cognito API call patterns
-            - Style: snake_case naming, no unused imports, ruff/pylint compliance
-            - Tests: are new features or bug fixes covered by tests?
-            Post inline comments on specific lines where relevant. Be concise.
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            BASE BRANCH: ${{ github.event.pull_request.base.ref }}
+
+            You are reviewing a pull request for pyhive-integration, the Python
+            library behind the Home Assistant Hive integration. Async source
+            lives in `src/` (`api/`, `session/`, `devices/`, `helper/`).
+
+            Your main job is to find real bugs: code that will behave wrongly,
+            crash, or break users at runtime. Spend most of your effort here.
+            Everything else is secondary.
+
+            ## How to run
+            - Do the review yourself in this session. Do not start sub-agents or
+              background tasks: the run ends as soon as you stop, so anything
+              they would post never arrives.
+            - Read the PR with `gh pr view ${{ github.event.pull_request.number }} --comments`
+              and `gh pr diff ${{ github.event.pull_request.number }}`. If the diff
+              is too large for the API, use
+              `git diff origin/${{ github.event.pull_request.base.ref }}...HEAD`
+              (add `--stat` or a path to narrow it). Full history is already
+              checked out; no fetch is needed.
+            - Read surrounding code with Read/Grep/Glob when a change is unclear.
+            - Do not repeat points already raised in earlier review comments.
+
+            ## Home Assistant is the main consumer
+            This library exists to power Home Assistant's `hive` integration, so
+            a change that looks fine here can still be a bug on the Home Assistant
+            side. When a PR touches the public API (`Hive`, `start_session`,
+            `update_data`, `device_list`, `device.status` keys and value types,
+            camelCase aliases, exceptions raised, or the `hive.*` device module
+            methods), check how Home Assistant calls it. Fetch the relevant pages
+            with WebFetch:
+            - Integration source (the actual caller). Fetch the raw files:
+              https://raw.githubusercontent.com/home-assistant/core/dev/homeassistant/components/hive/<file>
+              where <file> is one of: __init__.py, config_flow.py, entity.py,
+              const.py, climate.py, water_heater.py, light.py, switch.py,
+              binary_sensor.py, sensor.py, manifest.json.
+              Browse: https://github.com/home-assistant/core/tree/dev/homeassistant/components/hive
+            - User docs: https://www.home-assistant.io/integrations/hive/
+            - Developer docs:
+              - Entities overview: https://developers.home-assistant.io/docs/core/entity/
+              - climate: https://developers.home-assistant.io/docs/core/entity/climate/
+              - water_heater: https://developers.home-assistant.io/docs/core/entity/water-heater/
+              - light: https://developers.home-assistant.io/docs/core/entity/light/
+              - switch: https://developers.home-assistant.io/docs/core/entity/switch/
+              - binary_sensor: https://developers.home-assistant.io/docs/core/entity/binary-sensor/
+              - sensor: https://developers.home-assistant.io/docs/core/entity/sensor/
+              - Config flow (login, SMS 2FA, reauth): https://developers.home-assistant.io/docs/config_entries_config_flow_handler/
+              - Setup failures (ConfigEntryNotReady / ConfigEntryAuthFailed): https://developers.home-assistant.io/docs/integration_setup_failures/
+              - Blocking calls in the event loop: https://developers.home-assistant.io/docs/asyncio_blocking_operations/
+            Report a bug if Home Assistant would break: a renamed or removed
+            method or alias it calls, a changed return shape or `status` value
+            type/unit it reads, a new exception it doesn't catch, or anything
+            blocking the event loop. Quote the Home Assistant line you checked.
+            Only fetch what you need; skip this for PRs that don't touch the
+            public API.
+
+            ## What to look for, in priority order
+            1. Bugs (top priority). For every changed function, trace the actual
+               values it receives and returns, and check its callers too — a
+               change is often safe on its own but breaks a caller elsewhere.
+               Hunt for:
+               - wrong or missing `await`; blocking calls (`requests`,
+                 `time.sleep`, sync file I/O) inside async code; race conditions
+                 on shared session state or the polling cache
+               - `None` / missing-key cases (`KeyError`, `AttributeError`),
+                 especially on Hive API payloads where fields may be absent or
+                 devices offline
+               - off-by-one, inverted conditions, wrong comparison, wrong
+                 units (Celsius, mireds vs kelvin, 0-255 vs 0-100 brightness)
+               - exceptions swallowed or raised with the wrong type (the app
+                 relies on `HiveReauthRequired` propagating)
+               - token refresh, `_retry_login` and 2FA paths that loop, give up
+                 early or leave the session half-updated
+               - state that doesn't match what Home Assistant expects in
+                 `device.status` or `device_list`
+               - behaviour that differs between the async source and the
+                 generated sync package (`asyncio` -> `threading`)
+               For each bug, state the concrete input or scenario that triggers
+               it and what goes wrong. If you can't describe a trigger, it's
+               not a bug report — leave it out or mark it as a question.
+            2. Security: secrets or real credentials in code, tokens or PII in
+               log output (log payloads via `HiveHelper.sanitize_payload`),
+               unsafe HTTP or Cognito usage, un-anonymised data in `src/data/*.json`.
+            3. Project rules:
+               - Edit only the async source in `src/`. The sync `pyhiveapi`
+                 package is generated by unasync; never hand-edit it.
+               - Do not edit the deprecation shims (`src/heating.py` etc.); changes
+                 go in `src/devices/`, `src/session/` or `src/helper/`.
+               - Keep the camelCase aliases (`startSession`, `updateData`,
+                 `deviceList`, `helper/compat_aliases.py`) — Home Assistant uses them.
+               - The placeholder `aws_access_key_id` / `aws_secret_access_key` /
+                 `aws_session_token` strings in `hive_auth_async.py` must stay;
+                 do not flag them as leaked secrets.
+            4. Tests: new behaviour and bug fixes need tests in `tests/unit`,
+               `tests/module` or `tests/e2e`; coverage must stay at 99%. Async
+               tests don't need `@pytest.mark.asyncio`.
+            5. Public API: missing or wrong type hints on public methods, and
+               breaking changes without a migration note.
+
+            Skip pure style nits: ruff, pylint and mypy already run in CI.
+            Only report issues you are confident about, and say why each matters.
+
+            ## How to report
+            - Post each specific finding as an inline comment on the relevant
+              line with mcp__github_inline_comment__create_inline_comment.
+              Include a concrete suggested fix where you can.
+            - Then ALWAYS post exactly one summary comment, even if you found
+              nothing or could only review part of the PR. Write it to `review.md`
+              with the Write tool, then run exactly:
+              `gh pr comment ${{ github.event.pull_request.number }} --body-file review.md`
+              Do not use heredocs, `$(...)` or pipes in gh commands.
+            - Summary format: a one-line verdict, bugs found (listed first), then
+              other findings by severity (blocking / should fix / minor), and a
+              note on anything you did not review. Keep it brief.
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git diff:*),Bash(git fetch:*),Bash(git log:*),Bash(git show:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(grep:*),Bash(cat:*),Read,Write,Glob,Grep,WebFetch(domain:raw.githubusercontent.com),WebFetch(domain:github.com),WebFetch(domain:www.home-assistant.io),WebFetch(domain:developers.home-assistant.io)"
+            --disallowedTools "Agent,Task"

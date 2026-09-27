@@ -8,15 +8,19 @@ on:
     paths:
       - 'src/**'
       - 'tests/**'
+      - 'scripts/**'
       - 'setup.py'
       - 'pyproject.toml'
+      - 'MANIFEST.in'
       - '.github/workflows/tests.yml'
   pull_request:
     paths:
       - 'src/**'
       - 'tests/**'
+      - 'scripts/**'
       - 'setup.py'
       - 'pyproject.toml'
+      - 'MANIFEST.in'
       - '.github/workflows/tests.yml'
 
 jobs:
@@ -43,3 +47,30 @@ jobs:
 
       - name: Run tests
         run: pytest tests/ --tb=short --no-cov
+
+  packaging:
+    name: Packaging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+
+      # verify_dist.py installs the wheel, which pulls pyquery -> lxml. Match the
+      # tests job so a Python version without prebuilt lxml wheels can still build.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            libxml2-dev libxslt1-dev python3-dev build-essential
+          python -m pip install build
+
+      - name: Build distributions
+        run: python -m build
+
+      # The test suite runs against src/ via an editable install, so it cannot
+      # see packaging mistakes. This installs the built wheel in a clean venv
+      # and imports every module in it.
+      - name: Verify built distribution is importable
+        run: python scripts/verify_dist.py dist

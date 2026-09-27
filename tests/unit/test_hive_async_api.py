@@ -1,6 +1,7 @@
 """Unit tests for HiveApiAsync."""
 
 import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
@@ -246,6 +247,58 @@ class TestSetAction:
         api.websession.request.side_effect = OSError
         with pytest.raises(web_exceptions.HTTPError):
             await api.set_action("action-1", "{}")
+
+
+# ---------------------------------------------------------------------------
+# Tests: HiveApiAsync holiday mode
+# ---------------------------------------------------------------------------
+
+
+class TestHolidayMode:
+    async def test_get_holiday_mode_returns_parsed_json(self):
+        payload = {
+            "active": False,
+            "enabled": False,
+            "start": 1783006500000,
+            "end": 1783296000000,
+            "temperature": 12,
+            "status": "OK",
+        }
+        api = _make_api(status=200, json_data=payload)
+        result = await api.get_holiday_mode()
+        assert result["original"] == 200
+        assert result["parsed"] == payload
+
+    async def test_set_holiday_mode_posts_epoch_ms_body(self):
+        payload = {"start": 1783767707701, "end": 1784372507701, "temperature": 12}
+        api = _make_api(status=200, json_data=payload)
+        result = await api.set_holiday_mode(1783767707701, 1784372507701, 12)
+        assert result["original"] == 200
+        assert result["parsed"] == payload
+        _, kwargs = api.websession.request.call_args
+        assert json.loads(kwargs["data"]) == {
+            "start": 1783767707701,
+            "end": 1784372507701,
+            "temperature": 12,
+        }
+
+    async def test_set_holiday_mode_file_in_use_returns_file_response(self):
+        api = _make_api(status=200, file_mode=True)
+        result = await api.set_holiday_mode(1, 2, 12)
+        assert result == {"original": "file"}
+
+    async def test_cancel_holiday_mode_returns_set_true(self):
+        api = _make_api(status=200, json_data={"set": True})
+        result = await api.cancel_holiday_mode()
+        assert result["original"] == 200
+        assert result["parsed"] == {"set": True}
+        args, _ = api.websession.request.call_args
+        assert args[0] == "delete"
+
+    async def test_cancel_holiday_mode_file_in_use_returns_file_response(self):
+        api = _make_api(status=200, file_mode=True)
+        result = await api.cancel_holiday_mode()
+        assert result == {"original": "file"}
 
 
 # ---------------------------------------------------------------------------
@@ -514,8 +567,6 @@ class TestSetStateJsonEncoding:
 
     async def test_set_state_escapes_quotes_in_value(self):
         """A value containing double-quotes must produce valid, parseable JSON."""
-        import json  # noqa: PLC0415
-
         session = MagicMock()
         session.tokens.token_data = {"token": "tok"}
         session.config.file = False
