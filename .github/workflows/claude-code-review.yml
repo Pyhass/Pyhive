@@ -31,6 +31,9 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # TEMP: print Claude's transcript (incl. denied tool calls) to the job
+          # log while debugging missing review comments. Remove once working.
+          show_full_output: true
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
@@ -48,8 +51,12 @@ jobs:
             (add `--stat` or a path to narrow it down).
 
             Post inline comments on specific lines with
-            mcp__github_inline_comment__create_inline_comment. Finally, ALWAYS post
-            one overall summary with `gh pr comment ${{ github.event.pull_request.number }} --body "..."`,
-            even if you found no issues or could only review part of the PR. Be concise.
+            mcp__github_inline_comment__create_inline_comment.
+
+            Finally, ALWAYS post one overall summary comment, even if you found no
+            issues or could only review part of the PR. Write the summary to
+            `review.md` with the Write tool, then run exactly:
+            `gh pr comment ${{ github.event.pull_request.number }} --body-file review.md`
+            Do not use heredocs, `$(...)`, or pipes in gh commands. Be concise.
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Read,Glob,Grep"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(grep:*),Bash(cat:*),Read,Write,Glob,Grep"
