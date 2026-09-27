@@ -1,21 +1,56 @@
-# general things to ignore
+# Build artifacts
 build/
 dist/
 *.egg-info/
 *.egg
+*.spec
+*.manifest
+
+# Python bytecode
 *.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.Python
 __pycache__/
 *.so
-*~
-build
-dist
-pyhiveapi.egg-info
 
-# due to using tox and pytest
+# Testing and coverage
 .tox
 .cache
-test*
+coverage/
+.coverage
+.coverage.*
 custom_tests/*
 
-# virtual environment folder
+# Environment files
+.env
+
+# Virtual environments
 .venv/
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+
+# Claude superpowers
+superpowers/
+
+
+# caches
+*cache*
+
+
+# coverage (legacy locations)
+coverage.lcov
+lcov.info
+htmlcov/

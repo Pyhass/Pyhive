@@ -1,0 +1,69 @@
+name: Open dev -> master release PR (with version bump)
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-pr:
+    if: "!contains(github.event.head_commit.message, 'chore: bump version')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: dev
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Check for existing dev -> master PR
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing=$(gh pr list --base master --head dev --state open --json number --jq '.[0].number')
+          echo "existing=$existing" >> "$GITHUB_OUTPUT"
+          if [ -n "$existing" ]; then
+            echo "PR #$existing already open; skipping version bump."
+          fi
+
+      - name: Bump patch version in pyproject.toml
+        if: steps.check.outputs.existing == ''
+        run: |
+          python - <<'PY'
+          import re, pathlib
+          p = pathlib.Path("pyproject.toml")
+          s = p.read_text()
+          m = re.search(r'^version\s*=\s*"(\d+)\.(\d+)\.(\d+)"', s, re.MULTILINE)
+          if not m:
+              raise SystemExit("version not found in pyproject.toml")
+          maj, mnr, pat = map(int, m.groups())
+          new = f'version = "{maj}.{mnr}.{pat+1}"'
+          p.write_text(s[:m.start()] + new + s[m.end():])
+          print("Bumped to", new)
+          PY
+
+      - name: Commit bump
+        if: steps.check.outputs.existing == ''
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: bump version [skip ci]"
+            git push
+          fi
+
+      - name: Create dev -> master PR
+        if: steps.check.outputs.existing == ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --base master \
+            --head dev \
+            --title "Release: $(cat pyproject.toml | grep version | cut -d'"' -f2)" \
+            --body "Automated release PR. Contains merged feature PRs and a single version bump."

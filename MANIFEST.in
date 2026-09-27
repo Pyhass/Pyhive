@@ -1,4 +1,5 @@
-recursive-include pyhiveapi *
-include requirements.txt
-include requirements_test.txt
-recursive-include data *
+recursive-include src *.py
+recursive-include src/data *.json
+include LICENSE README.md
+global-exclude .DS_Store
+global-exclude *.py[cod]
