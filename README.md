@@ -183,3 +183,5 @@ python setup.py build_py
 ## License
 
 MIT License — see [LICENSE](https://github.com/Pyhass/Pyhive/blob/master/LICENSE) for details.
+
+<!-- Test PR: verifying Claude review bot identity on same-repo PRs. Do not merge. -->
