@@ -33,15 +33,16 @@ class HiveHotwater(BoostMixin, BaseDeviceHandler):
         """
         state = None
         final = None
+        device_name = device.ha_name
 
         try:
             data = self.session.data.products[device.hive_id]
             state = data["state"]["mode"]
             if state == "BOOST":
-                state = data["props"]["previous"]["mode"]
+                state = self._get_product_state(device, "props", "previous", "mode")
             final = HIVETOHA[self.hotwater_type].get(state, state)
         except KeyError as e:
-            _LOGGER.error(e)
+            _LOGGER.error("get_mode - KeyError getting mode for %s: %s", device_name, e)
 
         return final
 
@@ -77,7 +78,8 @@ class HiveHotwater(BoostMixin, BaseDeviceHandler):
                     snan = self.session.helper.get_schedule_nnl(
                         data["state"]["schedule"]
                     )
-                    state = snan["now"]["value"]["status"]
+                    if snan and "now" in snan:
+                        state = snan["now"]["value"]["status"]
 
             final = HIVETOHA[self.hotwater_type].get(state, state)
         except KeyError as e:
@@ -141,6 +143,12 @@ class HiveHotwater(BoostMixin, BaseDeviceHandler):
             "set_boost_off - Setting hot water boost OFF for %s.", device.ha_name
         )
         prev_mode = self._get_product_state(device, "props", "previous", "mode")
+        if prev_mode is None:
+            _LOGGER.warning(
+                "set_boost_off - Cannot determine previous mode for %s, skipping.",
+                device.ha_name,
+            )
+            return False
         return await self._execute_state_change(device, mode=prev_mode)
 
 

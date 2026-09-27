@@ -1,7 +1,6 @@
 """Pure SRP/HKDF crypto helpers for AWS Cognito authentication."""
 
 import binascii
-import concurrent.futures
 import hashlib
 import hmac
 import os
@@ -28,7 +27,6 @@ N_HEX = (
 # https://github.com/aws/amazon-cognito-identity-js/blob/master/src/AuthenticationHelper.js#L49
 G_HEX = "2"
 INFO_BITS = bytearray("Caldera Derived Key", "utf-8")
-POOL = concurrent.futures.ThreadPoolExecutor()
 
 
 def hex_to_long(hex_string):

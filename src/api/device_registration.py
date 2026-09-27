@@ -57,7 +57,7 @@ class DeviceRegistrationMixin:
     large_a_value: int
     client_secret: str | None
 
-    async def generate_hash_device(self, device_group_key, device_key):
+    def generate_hash_device(self, device_group_key, device_key):
         """Generate device hash key."""
         # source: https://github.com/amazon-archives/amazon-cognito-identity-js/blob/6b87f1a30a998072b4d98facb49dcaf8780d15b0/src/AuthenticationHelper.js#L137 # pylint: disable=line-too-long
 
@@ -81,7 +81,7 @@ class DeviceRegistrationMixin:
         self.device_password = device_password
         return device_secret_verifier_config
 
-    async def get_device_authentication_key(  # pylint: disable=too-many-positional-arguments
+    def get_device_authentication_key(  # pylint: disable=too-many-positional-arguments
         self, device_group_key, device_key, device_password, server_b_value, salt
     ):
         """Get device authentication key."""
@@ -120,7 +120,7 @@ class DeviceRegistrationMixin:
                 "%a %b %d %H:%M:%S UTC %Y"
             ),
         )
-        hkdf = await self.get_device_authentication_key(
+        hkdf = self.get_device_authentication_key(
             self.device_group_key,
             self.device_key,
             self.device_password,
@@ -169,7 +169,7 @@ class DeviceRegistrationMixin:
 
         result = None
         try:
-            device_secret_verifier_config = await self.generate_hash_device(
+            device_secret_verifier_config = self.generate_hash_device(
                 self.device_group_key, self.device_key
             )
             result = await self.loop.run_in_executor(
@@ -183,14 +183,12 @@ class DeviceRegistrationMixin:
                 ),
             )
         except botocore.exceptions.ClientError as err:
-            if err.__class__.__name__ in (
-                "NotAuthorizedException",
-                "CodeMismatchException",
-            ):
+            code = (err.response or {}).get("Error", {}).get("Code", "")
+            if code == "CodeMismatchException":
                 raise HiveInvalid2FACode from err
+            raise HiveApiError from err
         except botocore.exceptions.EndpointConnectionError as err:
-            if err.__class__.__name__ == "EndpointConnectionError":
-                raise HiveApiError from err
+            raise HiveApiError from err
 
         return result
 
@@ -210,8 +208,7 @@ class DeviceRegistrationMixin:
                 ),
             )
         except botocore.exceptions.EndpointConnectionError as err:
-            if err.__class__.__name__ == "EndpointConnectionError":
-                raise HiveApiError from err
+            raise HiveApiError from err
 
         return result
 
@@ -335,10 +332,8 @@ class DeviceRegistrationMixin:
                 ),
             )
         except botocore.exceptions.ClientError as err:
-            if err.__class__.__name__ == "NotAuthorizedException":
-                raise HiveInvalid2FACode from err
+            raise HiveApiError from err
         except botocore.exceptions.EndpointConnectionError as err:
-            if err.__class__.__name__ == "ResourceNotFoundException":
-                raise HiveApiError from err
+            raise HiveApiError from err
 
         return result

@@ -5,13 +5,15 @@
 from unittest.mock import AsyncMock
 
 from apyhiveapi.helper.compat_aliases import (
+    ActionCompatMixin,
     HeatingCompatMixin,
     LightCompatMixin,
+    SensorCompatMixin,
     SessionCompatMixin,
     SwitchCompatMixin,
     WaterHeaterCompatMixin,
 )
-from apyhiveapi.helper.hivedataclasses import Device
+from apyhiveapi.helper.hivedataclasses import Device, SessionConfig
 
 
 def _make_device():
@@ -319,13 +321,139 @@ class TestSessionCompatMixin:
         assert s.deviceList is s.device_list
 
     async def test_update_interval_returns_true(self):
-        """updateInterval always returns True (deprecated no-op)."""
+        """updateInterval returns True and updates config.scan_interval."""
 
         class Stub(SessionCompatMixin):
             """Stub for updateInterval test."""
 
             device_list = {}
 
+            def __init__(self):
+                self.config = SessionConfig()
+
         s = Stub()
         result = await s.updateInterval(60)
+        assert result is True
+
+
+# ---------------------------------------------------------------------------
+# SessionCompatMixin.updateInterval — bug fix tests
+# ---------------------------------------------------------------------------
+
+
+def _make_concrete_session():
+    """Return a minimal SessionCompatMixin subclass with a real SessionConfig."""
+
+    class ConcreteSession(SessionCompatMixin):
+        """Minimal concrete SessionCompatMixin for updateInterval tests."""
+
+        def __init__(self):
+            self.config = SessionConfig()
+            self.device_list = {}
+
+        async def start_session(self, config=None):  # pylint: disable=unused-argument
+            """Stub."""
+
+        async def update_data(self, device):  # pylint: disable=unused-argument
+            """Stub."""
+
+    return ConcreteSession()
+
+
+class TestSessionCompatMixinUpdateInterval:
+    """updateInterval must actually update config.scan_interval."""
+
+    async def test_update_interval_sets_scan_interval(self):
+        """updateInterval(300) must set self.config.scan_interval to timedelta(seconds=300)."""
+        from datetime import timedelta
+
+        session = _make_concrete_session()
+        await session.updateInterval(300)
+        assert session.config.scan_interval == timedelta(seconds=300)
+
+    async def test_update_interval_returns_true(self):
+        """updateInterval must return True on success."""
+        session = _make_concrete_session()
+        result = await session.updateInterval(60)
+        assert result is True
+
+
+# ---------------------------------------------------------------------------
+# Migrated from test_compat_aliases_extended.py
+# ---------------------------------------------------------------------------
+
+
+def _make_action_device(hive_type="action", ha_type="switch"):
+    return Device(
+        hive_id="h1",
+        hive_name="Test",
+        hive_type=hive_type,
+        ha_type=ha_type,
+        device_id="d1",
+        device_name="Test",
+        device_data={},
+    )
+
+
+class TestSensorCompatMixin:
+    """CamelCase alias smoke tests for SensorCompatMixin."""
+
+    async def test_get_sensor_delegates(self):
+        """getSensor delegates to get_sensor and returns its result."""
+
+        class Stub(SensorCompatMixin):
+            """Stub with mocked get_sensor."""
+
+            get_sensor = AsyncMock(return_value="sensor_result")
+
+        s = Stub()
+        d = _make_action_device(hive_type="motionsensor", ha_type="binary_sensor")
+        result = await s.getSensor(d)
+        s.get_sensor.assert_called_once_with(d)
+        assert result == "sensor_result"
+
+
+class TestActionCompatMixin:
+    """CamelCase alias smoke tests for ActionCompatMixin."""
+
+    async def test_get_action_delegates(self):
+        """getAction delegates to get_action and returns its result."""
+
+        class Stub(ActionCompatMixin):
+            """Stub with mocked get_action."""
+
+            get_action = AsyncMock(return_value="action_result")
+
+        s = Stub()
+        d = _make_action_device()
+        result = await s.getAction(d)
+        s.get_action.assert_called_once_with(d)
+        assert result == "action_result"
+
+    async def test_set_status_on_delegates(self):
+        """setStatusOn delegates to set_status_on and returns its result."""
+
+        class Stub(ActionCompatMixin):
+            """Stub with mocked set_status_on."""
+
+            set_status_on = AsyncMock(return_value=True)
+
+        s = Stub()
+        d = _make_action_device()
+        result = await s.setStatusOn(d)
+        s.set_status_on.assert_called_once_with(d)
+        assert result is True
+
+    async def test_set_status_off_delegates(self):
+        """setStatusOff delegates to set_status_off and returns its result."""
+
+        class Stub(ActionCompatMixin):
+            """Stub with mocked set_status_off."""
+
+            set_status_off = AsyncMock(return_value=True)
+
+        s = Stub()
+        d = _make_action_device()
+        result = await s.setStatusOff(d)
+        s.set_status_off.assert_called_once_with(d)
         assert result is True

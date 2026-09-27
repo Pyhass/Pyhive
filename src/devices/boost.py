@@ -29,7 +29,7 @@ class BoostMixin:
             data = self.session.data.products[device.hive_id]
             return HIVETOHA["Boost"].get(data["state"].get("boost", False), "ON")
         except KeyError as e:
-            _LOGGER.error(e)
+            _LOGGER.error("get_boost_status - KeyError for %s: %s", device.ha_name, e)
         return None
 
     async def get_boost_time(self, device: Device):
@@ -43,5 +43,5 @@ class BoostMixin:
                 data = self.session.data.products[device.hive_id]
                 return data["state"]["boost"]
             except KeyError as e:
-                _LOGGER.error(e)
+                _LOGGER.error("get_boost_time - KeyError for %s: %s", device.ha_name, e)
         return None

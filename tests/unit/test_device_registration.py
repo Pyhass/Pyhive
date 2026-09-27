@@ -84,35 +84,35 @@ async def _make_stub(
 class TestGenerateHashDevice:
     async def test_returns_verifier_config_with_required_keys(self):
         stub = await _make_stub()
-        result = await stub.generate_hash_device("grp-key", "dev-key")
+        result = stub.generate_hash_device("grp-key", "dev-key")
         assert "PasswordVerifier" in result
         assert "Salt" in result
 
     async def test_password_verifier_is_non_empty_string(self):
         stub = await _make_stub()
-        result = await stub.generate_hash_device("grp-key", "dev-key")
+        result = stub.generate_hash_device("grp-key", "dev-key")
         assert isinstance(result["PasswordVerifier"], str)
         assert len(result["PasswordVerifier"]) > 0
 
     async def test_salt_is_non_empty_string(self):
         stub = await _make_stub()
-        result = await stub.generate_hash_device("grp-key", "dev-key")
+        result = stub.generate_hash_device("grp-key", "dev-key")
         assert isinstance(result["Salt"], str)
         assert len(result["Salt"]) > 0
 
     async def test_sets_device_password_on_self(self):
         stub = await _make_stub()
         stub.device_password = None
-        await stub.generate_hash_device("grp-key", "dev-key")
+        stub.generate_hash_device("grp-key", "dev-key")
         assert stub.device_password is not None
         assert isinstance(stub.device_password, str)
         assert len(stub.device_password) > 0
 
     async def test_different_calls_produce_different_passwords(self):
         stub = await _make_stub()
-        await stub.generate_hash_device("grp-key", "dev-key")
+        stub.generate_hash_device("grp-key", "dev-key")
         password_first = stub.device_password
-        await stub.generate_hash_device("grp-key", "dev-key")
+        stub.generate_hash_device("grp-key", "dev-key")
         password_second = stub.device_password
         # Passwords are randomly generated — they should almost never match.
         # We check they are independently set strings (not None).
@@ -121,9 +121,9 @@ class TestGenerateHashDevice:
 
     async def test_different_device_keys_produce_different_verifiers(self):
         stub = await _make_stub()
-        result1 = await stub.generate_hash_device("grp-key", "dev-key-1")
+        result1 = stub.generate_hash_device("grp-key", "dev-key-1")
         verifier1 = result1["PasswordVerifier"]
-        result2 = await stub.generate_hash_device("grp-key", "dev-key-2")
+        result2 = stub.generate_hash_device("grp-key", "dev-key-2")
         verifier2 = result2["PasswordVerifier"]
         # Different keys + random passwords → almost certainly different verifiers
         # (at minimum the structure is valid for both)
@@ -173,7 +173,7 @@ class TestGetDeviceData:
 class TestConfirmDevice:
     async def test_uses_hostname_when_no_device_name(self):
         stub = await _make_stub()
-        stub.generate_hash_device = AsyncMock(
+        stub.generate_hash_device = MagicMock(
             return_value={"PasswordVerifier": "pv", "Salt": "s"}
         )
         with patch(
@@ -191,7 +191,7 @@ class TestConfirmDevice:
 
     async def test_uses_provided_device_name(self):
         stub = await _make_stub()
-        stub.generate_hash_device = AsyncMock(
+        stub.generate_hash_device = MagicMock(
             return_value={"PasswordVerifier": "pv", "Salt": "s"}
         )
         await stub.confirm_device("custom-name")
@@ -202,27 +202,27 @@ class TestConfirmDevice:
 
     async def test_returns_executor_result_on_success(self):
         stub = await _make_stub()
-        stub.generate_hash_device = AsyncMock(
+        stub.generate_hash_device = MagicMock(
             return_value={"PasswordVerifier": "pv", "Salt": "s"}
         )
         stub.loop.run_in_executor.return_value = {"UserConfirmed": True}
         result = await stub.confirm_device("test-device")
         assert result == {"UserConfirmed": True}
 
-    async def test_not_authorized_raises_invalid_2fa(self):
+    async def test_not_authorized_raises_api_error(self):
         stub = await _make_stub()
-        stub.generate_hash_device = AsyncMock(
+        stub.generate_hash_device = MagicMock(
             return_value={"PasswordVerifier": "pv", "Salt": "s"}
         )
         stub.loop.run_in_executor.side_effect = _named_client_error(
             "NotAuthorizedException"
         )
-        with pytest.raises(HiveInvalid2FACode):
+        with pytest.raises(HiveApiError):
             await stub.confirm_device("name")
 
     async def test_code_mismatch_raises_invalid_2fa(self):
         stub = await _make_stub()
-        stub.generate_hash_device = AsyncMock(
+        stub.generate_hash_device = MagicMock(
             return_value={"PasswordVerifier": "pv", "Salt": "s"}
         )
         stub.loop.run_in_executor.side_effect = _named_client_error(
@@ -233,7 +233,7 @@ class TestConfirmDevice:
 
     async def test_endpoint_error_raises_api_error(self):
         stub = await _make_stub()
-        stub.generate_hash_device = AsyncMock(
+        stub.generate_hash_device = MagicMock(
             return_value={"PasswordVerifier": "pv", "Salt": "s"}
         )
         stub.loop.run_in_executor.side_effect = _endpoint_error()
@@ -242,7 +242,7 @@ class TestConfirmDevice:
 
     async def test_passes_access_token_to_executor(self):
         stub = await _make_stub(access_token="my-access-token")
-        stub.generate_hash_device = AsyncMock(
+        stub.generate_hash_device = MagicMock(
             return_value={"PasswordVerifier": "pv", "Salt": "s"}
         )
         await stub.confirm_device("dev")
@@ -252,7 +252,7 @@ class TestConfirmDevice:
 
     async def test_passes_device_key_to_executor(self):
         stub = await _make_stub(device_key="my-device-key")
-        stub.generate_hash_device = AsyncMock(
+        stub.generate_hash_device = MagicMock(
             return_value={"PasswordVerifier": "pv", "Salt": "s"}
         )
         await stub.confirm_device("dev")
@@ -466,48 +466,24 @@ class TestForgetDevice:
         assert partial_fn.keywords["AccessToken"] == "forget-token"
         assert partial_fn.keywords["DeviceKey"] == "forget-key"
 
-    async def test_not_authorized_raises_invalid_2fa(self):
+    async def test_not_authorized_raises_api_error(self):
         stub = await _make_stub()
         stub.loop.run_in_executor.side_effect = _named_client_error(
             "NotAuthorizedException"
         )
-        with pytest.raises(HiveInvalid2FACode):
+        with pytest.raises(HiveApiError):
             await stub.forget_device("acc-token", "dev-key")
 
-    async def test_other_client_error_does_not_raise(self):
-        """ClientErrors other than NotAuthorizedException are silently swallowed."""
+    async def test_other_client_error_raises_api_error(self):
+        """All ClientErrors raise HiveApiError."""
         stub = await _make_stub()
         stub.loop.run_in_executor.side_effect = _named_client_error("SomeOtherError")
-        # No exception raised — result will be None
-        result = await stub.forget_device("acc-token", "dev-key")
-        assert result is None
+        with pytest.raises(HiveApiError):
+            await stub.forget_device("acc-token", "dev-key")
 
-    async def test_endpoint_error_does_not_raise_api_error(self):
-        """EndpointConnectionError only raises HiveApiError if class name is
-        'ResourceNotFoundException', which can never be true for an
-        EndpointConnectionError. The exception is therefore silently swallowed."""
+    async def test_endpoint_error_raises_api_error(self):
         stub = await _make_stub()
         stub.loop.run_in_executor.side_effect = _endpoint_error()
-        # The guard condition is always False for a real EndpointConnectionError,
-        # so no exception propagates.
-        result = await stub.forget_device("acc-token", "dev-key")
-        assert result is None
-
-    async def test_endpoint_error_named_resource_not_found_raises_api_error(self):
-        """A subclass of EndpointConnectionError named 'ResourceNotFoundException'
-        satisfies the guard at line 339 and raises HiveApiError (line 340)."""
-        stub = await _make_stub()
-        # Craft a class whose __class__.__name__ == "ResourceNotFoundException"
-        # but which IS an EndpointConnectionError (so it's caught by the except clause)
-        resource_cls = type(
-            "ResourceNotFoundException",
-            (botocore.exceptions.EndpointConnectionError,),
-            {},
-        )
-        resource_err = resource_cls(
-            endpoint_url="https://cognito.eu-west-1.amazonaws.com"
-        )
-        stub.loop.run_in_executor.side_effect = resource_err
         with pytest.raises(HiveApiError):
             await stub.forget_device("acc-token", "dev-key")
 
@@ -528,7 +504,7 @@ class TestGetDeviceAuthenticationKeyUZero:
         stub = await _make_stub()
         with patch("apyhiveapi.api.device_registration.calculate_u", return_value=0):
             with pytest.raises(ValueError, match="U cannot be zero"):
-                await stub.get_device_authentication_key(
+                stub.get_device_authentication_key(
                     stub.device_group_key,
                     stub.device_key,
                     stub.device_password,
@@ -555,7 +531,7 @@ class TestConfirmDeviceClientNone:
             stub.client = MagicMock()
 
         stub.async_init = fake_init
-        stub.generate_hash_device = AsyncMock(
+        stub.generate_hash_device = MagicMock(
             return_value={"PasswordVerifier": "pv", "Salt": "s"}
         )
         await stub.confirm_device("name")
@@ -622,10 +598,10 @@ class TestForgetDeviceClientNone:
 
 
 class TestConfirmDeviceSwallowedErrors:
-    async def test_other_client_error_is_swallowed(self):
-        """ClientError with an unrecognised class name is caught but not re-raised (184->193)."""
+    async def test_other_client_error_raises_api_error(self):
+        """ClientErrors other than CodeMismatchException raise HiveApiError."""
         stub = await _make_stub()
-        stub.generate_hash_device = AsyncMock(
+        stub.generate_hash_device = MagicMock(
             return_value={"PasswordVerifier": "pv", "Salt": "s"}
         )
         wrong_cls = type("SomeOtherError", (botocore.exceptions.ClientError,), {})
@@ -633,35 +609,8 @@ class TestConfirmDeviceSwallowedErrors:
             {"Error": {"Code": "SomeOtherError", "Message": "msg"}}, "op"
         )
         stub.loop.run_in_executor.side_effect = wrong_err
-        result = await stub.confirm_device("name")
-        assert result is None  # no HiveInvalid2FACode raised
-
-    async def test_endpoint_error_wrong_name_is_swallowed(self):
-        """EndpointConnectionError subclass with wrong __name__ is swallowed (190->193)."""
-        stub = await _make_stub()
-        stub.generate_hash_device = AsyncMock(
-            return_value={"PasswordVerifier": "pv", "Salt": "s"}
-        )
-        wrong_cls = type(
-            "WrongEndpoint", (botocore.exceptions.EndpointConnectionError,), {}
-        )
-        wrong_err = wrong_cls(endpoint_url="https://cognito.eu-west-1.amazonaws.com")
-        stub.loop.run_in_executor.side_effect = wrong_err
-        result = await stub.confirm_device("name")
-        assert result is None  # no HiveApiError raised
-
-
-class TestUpdateDeviceStatusSwallowedEndpointError:
-    async def test_endpoint_error_wrong_name_is_swallowed(self):
-        """EndpointConnectionError with wrong name is caught but not re-raised (211->214)."""
-        stub = await _make_stub()
-        wrong_cls = type(
-            "WrongEndpoint", (botocore.exceptions.EndpointConnectionError,), {}
-        )
-        wrong_err = wrong_cls(endpoint_url="https://cognito.eu-west-1.amazonaws.com")
-        stub.loop.run_in_executor.side_effect = wrong_err
-        result = await stub.update_device_status()
-        assert result is None  # no HiveApiError raised
+        with pytest.raises(HiveApiError):
+            await stub.confirm_device("name")
 
 
 class TestDeviceRegistration:
@@ -716,7 +665,6 @@ class TestProcessDeviceChallenge:
         with patch.object(
             stub,
             "get_device_authentication_key",
-            new_callable=AsyncMock,
             return_value=fake_hkdf,
         ):
             result = await stub.process_device_challenge(self._CHALLENGE_PARAMS)
@@ -733,7 +681,6 @@ class TestProcessDeviceChallenge:
         with patch.object(
             stub,
             "get_device_authentication_key",
-            new_callable=AsyncMock,
             return_value=fake_hkdf,
         ):
             result = await stub.process_device_challenge(self._CHALLENGE_PARAMS)
@@ -746,7 +693,6 @@ class TestProcessDeviceChallenge:
         with patch.object(
             stub,
             "get_device_authentication_key",
-            new_callable=AsyncMock,
             return_value=fake_hkdf,
         ):
             result = await stub.process_device_challenge(self._CHALLENGE_PARAMS)
@@ -759,7 +705,6 @@ class TestProcessDeviceChallenge:
         with patch.object(
             stub,
             "get_device_authentication_key",
-            new_callable=AsyncMock,
             return_value=fake_hkdf,
         ):
             result = await stub.process_device_challenge(self._CHALLENGE_PARAMS)
@@ -772,7 +717,6 @@ class TestProcessDeviceChallenge:
         with patch.object(
             stub,
             "get_device_authentication_key",
-            new_callable=AsyncMock,
             return_value=fake_hkdf,
         ):
             result = await stub.process_device_challenge(self._CHALLENGE_PARAMS)
@@ -785,7 +729,6 @@ class TestProcessDeviceChallenge:
         with patch.object(
             stub,
             "get_device_authentication_key",
-            new_callable=AsyncMock,
             return_value=fake_hkdf,
         ):
             result = await stub.process_device_challenge(self._CHALLENGE_PARAMS)
@@ -800,7 +743,6 @@ class TestProcessDeviceChallenge:
         with patch.object(
             stub,
             "get_device_authentication_key",
-            new_callable=AsyncMock,
             return_value=fake_hkdf,
         ):
             result = await stub.process_device_challenge(self._CHALLENGE_PARAMS)
@@ -823,7 +765,6 @@ class TestProcessDeviceChallenge:
         with patch.object(
             stub,
             "get_device_authentication_key",
-            new_callable=AsyncMock,
             return_value=fake_hkdf,
         ):
             result = await stub.process_device_challenge(self._CHALLENGE_PARAMS)
@@ -843,7 +784,6 @@ class TestProcessDeviceChallenge:
         with patch.object(
             stub,
             "get_device_authentication_key",
-            new_callable=AsyncMock,
             return_value=fake_hkdf,
         ) as mock_auth_key:
             await stub.process_device_challenge(params)
@@ -863,7 +803,7 @@ class TestGetDeviceAuthenticationKey:
         # Use a valid server_b_value that won't make u_value == 0.
         # Pick a large prime-ish value that is different from large_a_value.
         server_b_value = stub.large_a_value + 1
-        result = await stub.get_device_authentication_key(
+        result = stub.get_device_authentication_key(
             "grp-key",
             "dev-key",
             "dev-pass",
@@ -876,10 +816,80 @@ class TestGetDeviceAuthenticationKey:
     async def test_deterministic_for_same_inputs(self):
         stub = await _make_stub()
         server_b_value = stub.large_a_value + 1
-        result1 = await stub.get_device_authentication_key(
+        result1 = stub.get_device_authentication_key(
             "grp-key", "dev-key", "dev-pass", server_b_value, "aabbccdd"
         )
-        result2 = await stub.get_device_authentication_key(
+        result2 = stub.get_device_authentication_key(
             "grp-key", "dev-key", "dev-pass", server_b_value, "aabbccdd"
         )
         assert result1 == result2
+
+
+# ---------------------------------------------------------------------------
+# confirm_device and forget_device wrong exception mapping
+# ---------------------------------------------------------------------------
+
+
+class TestConfirmDeviceWrongException:
+    """confirm_device must map NotAuthorizedException → HiveApiError (not HiveInvalid2FACode)."""
+
+    async def test_not_authorized_raises_hive_api_error(self):
+        """NotAuthorizedException in confirm_device raises HiveApiError, not HiveInvalid2FACode."""
+        stub = await _make_stub()
+        err = botocore.exceptions.ClientError(
+            {"Error": {"Code": "NotAuthorizedException", "Message": "not auth"}},
+            "ConfirmDevice",
+        )
+        stub.loop.run_in_executor = AsyncMock(side_effect=err)
+
+        with pytest.raises(HiveApiError):
+            await stub.confirm_device()
+
+    async def test_not_authorized_does_not_raise_invalid_2fa(self):
+        """confirm_device must not raise HiveInvalid2FACode for NotAuthorizedException."""
+        stub = await _make_stub()
+        err = botocore.exceptions.ClientError(
+            {"Error": {"Code": "NotAuthorizedException", "Message": "not auth"}},
+            "ConfirmDevice",
+        )
+        stub.loop.run_in_executor = AsyncMock(side_effect=err)
+
+        with pytest.raises(Exception) as exc_info:
+            await stub.confirm_device()
+
+        assert not isinstance(exc_info.value, HiveInvalid2FACode)
+
+
+class TestForgetDeviceWrongException:
+    """forget_device must map NotAuthorizedException → HiveApiError."""
+
+    async def test_not_authorized_raises_hive_api_error(self):
+        """NotAuthorizedException in forget_device raises HiveApiError, not HiveInvalid2FACode."""
+        stub = await _make_stub()
+        err = botocore.exceptions.ClientError(
+            {"Error": {"Code": "NotAuthorizedException", "Message": "not auth"}},
+            "ForgetDevice",
+        )
+        stub.loop.run_in_executor = AsyncMock(side_effect=err)
+
+        with pytest.raises(HiveApiError):
+            await stub.forget_device("tok", "key")
+
+
+# ---------------------------------------------------------------------------
+# generate_hash_device — unnecessary async removed
+# ---------------------------------------------------------------------------
+
+
+class TestUnnecessaryAsync:
+    """generate_hash_device should work without async (callable directly)."""
+
+    def test_generate_hash_device_returns_config(self):
+        """generate_hash_device returns the verifier config without needing await."""
+        r = DeviceRegistrationMixin.__new__(DeviceRegistrationMixin)
+        r.device_password = None
+        r.g_value = 2
+        r.big_n = 0xFFFF
+        result = r.generate_hash_device("grp", "key")
+        assert "PasswordVerifier" in result
+        assert "Salt" in result

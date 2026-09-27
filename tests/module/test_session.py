@@ -178,4 +178,5 @@ class TestTokenRefreshRetry:
             with patch("asyncio.sleep", new=AsyncMock()):
                 with pytest.raises(Exception) as exc_info:
                     await hive._retry_with_backoff(always_fails, delays=(0, 0))  # pylint: disable=protected-access
-        assert "permanent failure" in str(exc_info.value.__cause__)
+        # The original exception instance propagates unchanged.
+        assert "permanent failure" in str(exc_info.value)

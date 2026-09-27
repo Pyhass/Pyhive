@@ -3,6 +3,7 @@
 # pylint: disable=protected-access,attribute-defined-outside-init,too-few-public-methods
 
 import asyncio
+from unittest.mock import AsyncMock, MagicMock
 
 from apyhiveapi.helper.hivedataclasses import Device
 from apyhiveapi.session.polling import PollingMixin
@@ -191,8 +192,6 @@ class TestPollDevices:
 
     async def test_poll_devices_delegates_to_get_devices(self):
         """_poll_devices calls get_devices('No_ID') and returns its result."""
-        from unittest.mock import AsyncMock
-
         p = _make_polling()
         p.get_devices = AsyncMock(return_value=True)
         result = await p._poll_devices()
@@ -201,9 +200,176 @@ class TestPollDevices:
 
     async def test_poll_devices_propagates_false(self):
         """_poll_devices returns False when get_devices returns False."""
-        from unittest.mock import AsyncMock
-
         p = _make_polling()
         p.get_devices = AsyncMock(return_value=False)
         result = await p._poll_devices()
         assert result is False
+
+
+# ---------------------------------------------------------------------------
+# TestGetDevicesSlowPoll
+# ---------------------------------------------------------------------------
+
+
+class TestGetDevicesSlowPoll:
+    async def test_auth_error_sets_last_poll_slow_false(self):
+        from apyhiveapi.helper.hive_exceptions import HiveAuthError
+
+        p = _make_polling()
+        p.api = MagicMock()
+        p.api.get_all = AsyncMock(side_effect=HiveAuthError())
+        p.config = MagicMock()
+        p.config.file = False
+        p.tokens = MagicMock()
+        p._last_poll_slow = True  # pre-set to True to confirm it gets cleared
+
+        retry_result = {
+            "original": 200,
+            "parsed": {"products": [], "devices": [], "actions": []},
+        }
+
+        async def fake_retry_login():
+            pass
+
+        async def fake_retry_with_backoff(_fn, **_kwargs):
+            return retry_result
+
+        p._retry_login = fake_retry_login
+        p._retry_with_backoff = fake_retry_with_backoff
+        p.hive_refresh_tokens = AsyncMock()
+        p.data = MagicMock()
+        p.data.products = {}
+        p.data.devices = {}
+        p.data.actions = {}
+        p.config.last_update = MagicMock()
+        p.config.scan_interval = MagicMock()
+
+        await p.get_devices("No_ID")
+        assert p._last_poll_slow is False
+
+    async def test_tokens_none_returns_false_without_crash(self):
+        """get_devices returns False (no crash) when tokens=None and file=False."""
+        from apyhiveapi.helper.map import Map
+
+        p = _make_polling()
+        p.config = MagicMock()
+        p.config.file = False
+        p.tokens = None  # triggers the "neither branch" path
+        p.data = Map({"products": {}, "devices": {}, "actions": {}, "user": {}})
+
+        result = await p.get_devices("No_ID")
+        assert result is False
+
+    async def test_slow_api_call_sets_last_poll_slow_true(self):
+        p = _make_polling()
+        p._slow_poll_threshold = 0  # any call will be "slow"
+        p.api = MagicMock()
+
+        slow_result = {
+            "original": 200,
+            "parsed": {"products": [], "devices": [], "actions": []},
+        }
+
+        async def slow_get_all():
+            return slow_result
+
+        p.api.get_all = slow_get_all
+        p.config = MagicMock()
+        p.config.file = False
+        p.tokens = MagicMock()
+        p.hive_refresh_tokens = AsyncMock()
+        p.data = MagicMock()
+        p.data.products = {}
+        p.data.devices = {}
+        p.data.actions = {}
+        p.config.last_update = MagicMock()
+        p.config.scan_interval = MagicMock()
+
+        await p.get_devices("No_ID")
+        assert p._last_poll_slow is True
+
+
+# ---------------------------------------------------------------------------
+# TestGetDevicesNoneGuard — api.get_all() returning None must not crash
+# ---------------------------------------------------------------------------
+
+
+class TestGetDevicesNoneGuard:
+    """api_resp_d must be guarded before dict access when api.get_all() returns None."""
+
+    async def test_api_returns_none_does_not_crash(self):
+        """get_devices returns False without crashing when api.get_all() returns None."""
+        from apyhiveapi.helper.map import Map
+
+        p = _make_polling()
+        p.config = MagicMock()
+        p.config.file = False
+        p.tokens = MagicMock()
+        p.api = MagicMock()
+        p.api.get_all = AsyncMock(return_value=None)
+        p.hive_refresh_tokens = AsyncMock()
+        p.data = Map({"products": {}, "devices": {}, "actions": {}, "user": {}})
+
+        result = await p.get_devices("No_ID")
+        assert result is False
+
+
+# ---------------------------------------------------------------------------
+# TestGetDevicesHomesKey — homes list null/empty must not crash
+# ---------------------------------------------------------------------------
+
+
+class TestGetDevicesHomesKey:
+    """homes key in API response must not crash when homes list is None or empty."""
+
+    async def _run_get_devices_with_parsed(self, parsed):
+        from apyhiveapi.helper.map import Map
+
+        p = _make_polling()
+        p.config = MagicMock()
+        p.config.file = False
+        p.tokens = MagicMock()
+        p.api = MagicMock()
+        p.api.get_all = AsyncMock(return_value={"original": "200", "parsed": parsed})
+        p.hive_refresh_tokens = AsyncMock()
+        p.data = Map({"products": {}, "devices": {}, "actions": {}, "user": {}})
+        return p, await p.get_devices("No_ID")
+
+    async def test_homes_null_does_not_crash(self):
+        """No crash when API returns homes.homes = None."""
+        parsed = {
+            "products": [],
+            "devices": [],
+            "actions": [],
+            "homes": {"homes": None},
+        }
+        _p, result = await self._run_get_devices_with_parsed(parsed)
+        assert isinstance(result, bool)
+
+    async def test_homes_empty_list_does_not_crash(self):
+        """No crash when API returns homes.homes = []."""
+        parsed = {"products": [], "devices": [], "actions": [], "homes": {"homes": []}}
+        _p, result = await self._run_get_devices_with_parsed(parsed)
+        assert isinstance(result, bool)
+
+    async def test_valid_homes_list_sets_home_id(self):
+        """home_id is set correctly from a valid homes list."""
+        parsed = {
+            "products": [],
+            "devices": [],
+            "actions": [],
+            "homes": {"homes": [{"id": "home-abc"}]},
+        }
+        p, _ = await self._run_get_devices_with_parsed(parsed)
+        assert p.config.home_id == "home-abc"
+
+    async def test_homes_data_not_dict_does_not_crash(self):
+        """No crash when homes_data is a non-dict (list); home_id stays unset."""
+        parsed = {
+            "products": [],
+            "devices": [],
+            "actions": [],
+            "homes": [{"id": "home-list"}],
+        }
+        _p, result = await self._run_get_devices_with_parsed(parsed)
+        assert isinstance(result, bool)

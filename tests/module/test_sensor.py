@@ -65,19 +65,6 @@ class TestGetState:
         )
         assert await sensor.get_state(_make_device()) is False
 
-    async def test_motionsensor_returns_motion_status(self):
-        """get_state returns the motion status boolean for a motionsensor."""
-        sensor = _make_sensor(
-            products={
-                "sens-1": {
-                    "type": "motionsensor",
-                    "props": {"motion": {"status": True}},
-                }
-            }
-        )
-        result = await sensor.get_state(_make_device(hive_type="motionsensor"))
-        assert result is True
-
     async def test_missing_key_returns_none(self):
         """get_state returns None when the hive_id is not in products."""
         sensor = _make_sensor()

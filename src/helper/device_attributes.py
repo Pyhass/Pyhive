@@ -3,8 +3,6 @@
 import logging
 from typing import Any
 
-from .const import HIVETOHA
-
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -18,7 +16,6 @@ class HiveAttributes:
             session (object, optional): Session to interact with hive account. Defaults to None.
         """
         self.session = session
-        self.type = "Attribute"
 
     async def state_attributes(self, n_id: str, _type: str):
         """Get HA State Attributes.
@@ -70,17 +67,12 @@ class HiveAttributes:
         Returns:
             str: The mode of the device.
         """
-        state = None
-        final = None
-
         try:
             data = self.session.data.products[n_id]
-            state = data["state"]["mode"]
-            final = HIVETOHA[self.type].get(state, state)
+            return data["state"]["mode"]
         except KeyError as e:
             _LOGGER.error(e)
-
-        return final
+        return None
 
     async def get_battery(self, n_id: str):
         """Get device battery level.
@@ -98,7 +90,6 @@ class HiveAttributes:
             data = self.session.data.devices[n_id]
             state = data["props"]["battery"]
             final = state
-            await self.session.helper.error_check(n_id, self.type, state)
         except KeyError as e:
             _LOGGER.error(e)
 

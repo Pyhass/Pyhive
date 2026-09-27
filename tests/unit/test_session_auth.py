@@ -93,6 +93,84 @@ class TestUpdateTokensExtended:
         await s.update_tokens(AUTH_RESULT, update_expiry_time=True)
         assert s.tokens.token_created > before
 
+    async def test_auth_result_missing_id_token_does_not_raise(self):
+        """AuthenticationResult with only AccessToken (e.g. file mode) must not crash."""
+        s = _make_stub()
+        payload = {"AuthenticationResult": {"AccessToken": "only-access"}}
+        await s.update_tokens(payload)
+        assert s.tokens.token_data["accessToken"] == "only-access"
+        # IdToken absent — the session token must not have been overwritten
+        assert s.tokens.token_data["token"] == ""
+
+    async def test_flat_dict_missing_access_token_does_not_raise(self):
+        """A flat token dict without accessToken must not crash."""
+        s = _make_stub()
+        flat = {"token": "t-only"}
+        await s.update_tokens(flat)
+        assert s.tokens.token_data["token"] == "t-only"
+        assert s.tokens.token_data["accessToken"] == ""
+
+    async def test_auth_result_missing_access_token_does_not_raise(self):
+        """AuthenticationResult with only IdToken must not crash."""
+        s = _make_stub()
+        payload = {"AuthenticationResult": {"IdToken": "only-id"}}
+        await s.update_tokens(payload)
+        assert s.tokens.token_data["token"] == "only-id"
+        assert s.tokens.token_data["accessToken"] == ""
+
+
+# ---------------------------------------------------------------------------
+# _retry_with_backoff — re-raise semantics
+# ---------------------------------------------------------------------------
+
+
+class _NeedsArgsError(Exception):
+    """Exception type that cannot be constructed without arguments."""
+
+    def __init__(self, first, second):
+        super().__init__(f"{first}/{second}")
+
+
+class TestRetryWithBackoffReraise:
+    """Without reraise_as, the original exception instance must propagate."""
+
+    async def test_original_exception_instance_propagates(self):
+        """The last caught error is re-raised as-is, not re-instantiated."""
+        s = _make_stub()
+        original = _NeedsArgsError("a", "b")
+
+        async def _always_fail():
+            raise original
+
+        with pytest.raises(_NeedsArgsError) as excinfo:
+            await s._retry_with_backoff(_always_fail, delays=(0,))
+
+        assert excinfo.value is original
+
+    async def test_empty_delays_raises_runtime_error(self):
+        """With no attempts configured the defensive fallback raises RuntimeError."""
+        s = _make_stub()
+
+        async def _never_called():
+            raise AssertionError("should not run")
+
+        with pytest.raises(RuntimeError, match="exhausted"):
+            await s._retry_with_backoff(_never_called, delays=())
+
+    async def test_reraise_as_still_translates_exception_type(self):
+        """When reraise_as is given the error is translated with chaining."""
+        s = _make_stub()
+
+        async def _always_fail():
+            raise ValueError("boom")
+
+        with pytest.raises(HiveReauthRequired) as excinfo:
+            await s._retry_with_backoff(
+                _always_fail, delays=(0,), reraise_as=HiveReauthRequired
+            )
+
+        assert isinstance(excinfo.value.__cause__, ValueError)
+
 
 # ---------------------------------------------------------------------------
 # _handle_device_login_challenge — extra branch
@@ -290,3 +368,193 @@ class TestHiveRefreshTokensExtended:
         s.auth.refresh_token.return_value = AUTH_RESULT
         await s.hive_refresh_tokens(force_refresh=True)
         s.auth.refresh_token.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# update_tokens — elif "token" branch missing token_created and bare refreshToken
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateTokensTokenBranch:
+    """update_tokens must set token_created and guard missing refreshToken in elif branch."""
+
+    async def test_token_branch_sets_token_created(self):
+        """elif 'token' branch must update token_created (was missing, stayed datetime.min)."""
+        s = _make_stub()
+        await s.update_tokens(
+            {"token": "id-tok", "refreshToken": "ref-tok", "accessToken": "acc-tok"}
+        )
+        assert s.tokens.token_created > datetime.min
+
+    async def test_token_branch_updates_token_data(self):
+        """elif 'token' branch stores all three token values."""
+        s = _make_stub()
+        await s.update_tokens(
+            {"token": "id", "refreshToken": "ref", "accessToken": "acc"}
+        )
+        assert s.tokens.token_data["token"] == "id"
+        assert s.tokens.token_data["refreshToken"] == "ref"
+        assert s.tokens.token_data["accessToken"] == "acc"
+
+    async def test_token_branch_missing_refresh_token_does_not_crash(self):
+        """elif 'token' branch without refreshToken key must not raise KeyError."""
+        s = _make_stub()
+        await s.update_tokens({"token": "id", "accessToken": "acc"})
+        assert s.tokens.token_data["token"] == "id"
+
+    async def test_token_branch_update_expiry_false_does_not_update_token_created(self):
+        """update_expiry_time=False skips the token_created assignment in elif 'token' branch."""
+
+        s = _make_stub()
+        original_created = s.tokens.token_created
+        await s.update_tokens(
+            {"token": "id", "accessToken": "acc"},
+            update_expiry_time=False,
+        )
+        assert s.tokens.token_created == original_created
+
+
+# ---------------------------------------------------------------------------
+# hive_refresh_tokens — bare refreshToken access raises KeyError when missing
+# ---------------------------------------------------------------------------
+
+
+class TestHiveRefreshTokensMissingRefreshToken:
+    """hive_refresh_tokens must not crash when token_data has no refreshToken."""
+
+    async def test_missing_refresh_token_does_not_raise_key_error(self):
+        """hive_refresh_tokens without refreshToken in token_data must not crash."""
+        s = _make_stub()
+        s.tokens.token_data = {"token": "id", "accessToken": "acc"}
+        s.tokens.token_created = datetime.now() - timedelta(hours=2)
+        s.tokens.token_expiry = timedelta(hours=1)
+        s.auth.refresh_token.return_value = None
+        result = await s.hive_refresh_tokens()
+        assert result is None
+
+
+# ===========================================================================
+# Migrated from test_remaining_branches.py
+# ===========================================================================
+
+
+class TestRetryWithBackoffNonZeroDelay:
+    """Line 66: asyncio.sleep called when delay > 0."""
+
+    async def test_non_zero_delay_is_awaited_but_succeeds(self):
+        """A non-zero delay entry causes asyncio.sleep to be called; factory still runs."""
+        from unittest.mock import patch
+
+        s = _make_stub()
+        calls = []
+
+        async def factory():
+            calls.append(1)
+            return "ok"
+
+        with patch(
+            "apyhiveapi.session.auth.asyncio.sleep", new_callable=AsyncMock
+        ) as mock_sleep:
+            result = await s._retry_with_backoff(factory, delays=(5,))
+        assert result == "ok"
+        mock_sleep.assert_called_once_with(5)
+        assert len(calls) == 1
+
+    async def test_zero_delay_does_not_call_sleep(self):
+        """A zero delay skips asyncio.sleep."""
+        from unittest.mock import patch
+
+        s = _make_stub()
+
+        async def factory():
+            return "done"
+
+        with patch(
+            "apyhiveapi.session.auth.asyncio.sleep", new_callable=AsyncMock
+        ) as mock_sleep:
+            result = await s._retry_with_backoff(factory, delays=(0,))
+        assert result == "done"
+        mock_sleep.assert_not_called()
+
+
+class TestUpdateTokensFlatDictWithExpiresIn:
+    """Lines 100->106: flat token dict with ExpiresIn sets token_expiry."""
+
+    async def test_flat_dict_with_expires_in_sets_token_expiry(self):
+        """Flat token dict containing ExpiresIn updates tokens.token_expiry."""
+        s = _make_stub()
+        flat = {
+            "token": "t",
+            "refreshToken": "r",
+            "accessToken": "a",
+            "ExpiresIn": 1800,
+        }
+        await s.update_tokens(flat)
+        assert s.tokens.token_expiry == timedelta(seconds=1800)
+
+    async def test_flat_dict_tokens_are_stored(self):
+        """All token values from flat dict are written to token_data."""
+        s = _make_stub()
+        flat = {"token": "my-id", "refreshToken": "my-rt", "accessToken": "my-at"}
+        await s.update_tokens(flat)
+        assert s.tokens.token_data["token"] == "my-id"
+        assert s.tokens.token_data["refreshToken"] == "my-rt"
+        assert s.tokens.token_data["accessToken"] == "my-at"
+
+
+class TestLoginApiError:
+    """Lines 160-162: HiveApiError in login() is logged and re-raised."""
+
+    async def test_login_api_error_reraises(self):
+        """HiveApiError raised by auth.login propagates unchanged to the caller."""
+        s = _make_stub()
+        s.auth.login.side_effect = HiveApiError()
+        with pytest.raises(HiveApiError):
+            await s.login()
+
+
+class TestHiveRefreshTokensNoAuthResult:
+    """Lines 341->373: refresh returns a result but without AuthenticationResult."""
+
+    async def test_result_without_auth_result_does_not_update_tokens(self):
+        """When refresh_token returns a dict with no AuthenticationResult, tokens stay unchanged."""
+        s = _make_stub()
+        s.tokens.token_created = datetime.now() - timedelta(hours=2)
+        s.tokens.token_expiry = timedelta(hours=1)
+        # Return something truthy but without AuthenticationResult
+        s.auth.refresh_token.return_value = {"SomeOtherKey": "value"}
+        result = await s.hive_refresh_tokens()
+        # Tokens must not have been updated
+        assert s.tokens.token_data["token"] == ""
+        assert s.tokens.token_data["accessToken"] == ""
+        # result is what refresh_token returned
+        assert result == {"SomeOtherKey": "value"}
+
+    async def test_none_refresh_result_does_not_update_tokens(self):
+        """When refresh_token returns None, tokens are left unchanged."""
+        s = _make_stub()
+        s.tokens.token_created = datetime.now() - timedelta(hours=2)
+        s.tokens.token_expiry = timedelta(hours=1)
+        s.auth.refresh_token.return_value = None
+        await s.hive_refresh_tokens()
+        assert s.tokens.token_data["token"] == ""
+
+
+class TestUpdateTokensUnknownKey:
+    """session/auth.py 100->106: tokens dict has neither AuthenticationResult nor token."""
+
+    async def test_unknown_key_does_not_raise_and_does_not_update_tokens(self):
+        """When neither expected key is present, data stays {}, ExpiresIn check skips."""
+        s = _make_stub()
+        original_token = s.tokens.token_data["token"]
+        # Pass a dict that is neither the AuthResult form nor the flat-token form
+        await s.update_tokens({"some_other_key": "some_value"})
+        # Tokens must be unchanged
+        assert s.tokens.token_data["token"] == original_token
+
+    async def test_unknown_key_does_not_set_token_expiry(self):
+        """ExpiresIn check at line 106 skips when data is {} (no match in either branch)."""
+        s = _make_stub()
+        original_expiry = s.tokens.token_expiry
+        await s.update_tokens({"random_key": "random_value"})
+        assert s.tokens.token_expiry == original_expiry
