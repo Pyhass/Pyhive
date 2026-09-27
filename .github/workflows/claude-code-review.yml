@@ -180,6 +180,17 @@ jobs:
             - Summary format: a one-line verdict, bugs found (listed first), then
               other findings by severity (blocking / should fix / minor), and a
               note on anything you did not review. Keep it brief.
+            - Label everything you post so readers know it came from this
+              automated review (it may be posted as github-actions[bot]):
+              - Start every inline comment with exactly:
+                `**🤖 Claude Code Review**`
+                followed by a blank line, then the finding.
+              - Start the summary comment with exactly:
+                `## 🤖 Claude Code Review`
+                followed by a blank line, then the verdict.
+              - End the summary comment with exactly:
+                `---`
+                `<sub>Automated review by Claude Code · [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})</sub>`
           claude_args: |
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git diff:*),Bash(git fetch:*),Bash(git log:*),Bash(git show:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(grep:*),Bash(cat:*),Read,Write,Glob,Grep,WebFetch(domain:raw.githubusercontent.com),WebFetch(domain:github.com),WebFetch(domain:www.home-assistant.io),WebFetch(domain:developers.home-assistant.io)"
             --disallowedTools "Agent,Task"
