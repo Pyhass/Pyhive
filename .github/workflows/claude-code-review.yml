@@ -44,6 +44,10 @@ jobs:
             library behind the Home Assistant Hive integration. Async source
             lives in `src/` (`api/`, `session/`, `devices/`, `helper/`).
 
+            Your main job is to find real bugs: code that will behave wrongly,
+            crash, or break users at runtime. Spend most of your effort here.
+            Everything else is secondary.
+
             ## How to run
             - Do the review yourself in this session. Do not start sub-agents or
               background tasks: the run ends as soon as you stop, so anything
@@ -58,9 +62,29 @@ jobs:
             - Do not repeat points already raised in earlier review comments.
 
             ## What to look for, in priority order
-            1. Correctness: logic errors, wrong or missing `await`, blocking calls
-               (`requests`, `time.sleep`, sync file I/O) inside async code,
-               unhandled exceptions, broken token refresh or `_retry_login` paths.
+            1. Bugs (top priority). For every changed function, trace the actual
+               values it receives and returns, and check its callers too — a
+               change is often safe on its own but breaks a caller elsewhere.
+               Hunt for:
+               - wrong or missing `await`; blocking calls (`requests`,
+                 `time.sleep`, sync file I/O) inside async code; race conditions
+                 on shared session state or the polling cache
+               - `None` / missing-key cases (`KeyError`, `AttributeError`),
+                 especially on Hive API payloads where fields may be absent or
+                 devices offline
+               - off-by-one, inverted conditions, wrong comparison, wrong
+                 units (Celsius, mireds vs kelvin, 0-255 vs 0-100 brightness)
+               - exceptions swallowed or raised with the wrong type (the app
+                 relies on `HiveReauthRequired` propagating)
+               - token refresh, `_retry_login` and 2FA paths that loop, give up
+                 early or leave the session half-updated
+               - state that doesn't match what Home Assistant expects in
+                 `device.status` or `device_list`
+               - behaviour that differs between the async source and the
+                 generated sync package (`asyncio` -> `threading`)
+               For each bug, state the concrete input or scenario that triggers
+               it and what goes wrong. If you can't describe a trigger, it's
+               not a bug report — leave it out or mark it as a question.
             2. Security: secrets or real credentials in code, tokens or PII in
                log output (log payloads via `HiveHelper.sanitize_payload`),
                unsafe HTTP or Cognito usage, un-anonymised data in `src/data/*.json`.
@@ -92,9 +116,9 @@ jobs:
               with the Write tool, then run exactly:
               `gh pr comment ${{ github.event.pull_request.number }} --body-file review.md`
               Do not use heredocs, `$(...)` or pipes in gh commands.
-            - Summary format: a one-line verdict, a short bullet list of findings
-              by severity (blocking / should fix / minor), and a note on anything
-              you did not review. Keep it brief.
+            - Summary format: a one-line verdict, bugs found (listed first), then
+              other findings by severity (blocking / should fix / minor), and a
+              note on anything you did not review. Keep it brief.
           claude_args: |
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git diff:*),Bash(git fetch:*),Bash(git log:*),Bash(git show:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(grep:*),Bash(cat:*),Read,Write,Glob,Grep"
             --disallowedTools "Agent,Task"
