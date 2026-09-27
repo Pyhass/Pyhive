@@ -233,3 +233,79 @@ class TestTurnOn:
         call_kwargs = session.api.set_state.call_args.kwargs
         assert call_kwargs.get("colourMode") == "COLOUR"
         assert call_kwargs.get("hue") == str(color[0])
+
+
+# ---------------------------------------------------------------------------
+# get_brightness — must return int, not float
+# ---------------------------------------------------------------------------
+
+
+class TestGetBrightnessReturnsInt:
+    """get_brightness must return int, not float."""
+
+    async def test_get_brightness_returns_int(self):
+        """Brightness value is returned as int (not float) for HA compatibility."""
+        from apyhiveapi.devices.light import HiveLight
+
+        class StubLight(HiveLight):
+            """Concrete stub for testing."""
+
+        h = StubLight()
+        h.session = MagicMock()
+        h.session.data.products = {"h1": {"state": {"brightness": 50}}}
+        d = Device(
+            hive_id="h1",
+            hive_name="L",
+            hive_type="warmwhitelight",
+            ha_type="light",
+            device_id="d1",
+            device_name="L",
+            device_data={"online": True},
+            ha_name="Light",
+        )
+        result = await h.get_brightness(d)
+        assert isinstance(result, int), (
+            f"Expected int, got {type(result).__name__}: {result!r}"
+        )
+        assert result == 127
+
+
+class TestGetBrightnessNullValue:
+    """A null brightness in the API payload must not raise TypeError."""
+
+    async def test_null_brightness_returns_none(self):
+        session = _make_session(
+            products={
+                "light-1": {
+                    "state": {"status": "ON", "brightness": None},
+                    "props": {},
+                }
+            },
+        )
+        light = Light(session=session)
+        result = await light.get_brightness(_make_device())
+        assert result is None
+
+
+# ===========================================================================
+# Migrated from test_remaining_branches.py
+# ===========================================================================
+
+
+class TestLightGetLightCacheMiss:
+    """Lines 141->147: cache enabled but cached is None → normal execution."""
+
+    async def test_cached_none_falls_through(self):
+        session = _make_session(
+            products={
+                "light-1": {"state": {"status": "ON", "brightness": 100}, "props": {}}
+            },
+            devices={"dev-1": {"state": {}, "props": {}}},
+        )
+        light = Light(session=session)
+        d = _make_device()
+        session.should_use_cached_data.return_value = True
+        session.get_cached_device.return_value = None
+        result = await light.get_light(d)
+        assert result is not None
+        session.attr.online_offline.assert_called_once()

@@ -102,12 +102,12 @@ class SessionTokens:
 class SessionConfig:
     """Typed container for session configuration state."""
 
-    battery: list = field(default_factory=list)
+    battery: set = field(default_factory=set)
     error_list: dict = field(default_factory=dict)
     file: bool = False
     home_id: str | None = None
     last_update: datetime = field(default_factory=datetime.now)
-    mode: list = field(default_factory=list)
+    mode: set = field(default_factory=set)
     scan_interval: timedelta = field(default_factory=lambda: _SCAN_INTERVAL)
     user_id: str | None = None
     username: str | None = None

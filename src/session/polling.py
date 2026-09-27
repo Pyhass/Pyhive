@@ -144,7 +144,17 @@ class PollingMixin:
                 api_call_start = time.monotonic()
                 try:
                     api_resp_d = await self.api.get_all()
+                    api_call_duration = time.monotonic() - api_call_start
+                    if api_call_duration > self._slow_poll_threshold:
+                        _LOGGER.debug(
+                            "get_devices - Hive API response took %.1fs — marking poll as slow.",
+                            api_call_duration,
+                        )
+                        self._last_poll_slow = True
+                    else:
+                        self._last_poll_slow = False
                 except HiveAuthError:
+                    self._last_poll_slow = False
                     _LOGGER.warning(
                         "Auth error (401/403) after token refresh, "
                         "falling back to full device re-login."
@@ -154,15 +164,8 @@ class PollingMixin:
                         self.api.get_all,
                         reraise_as=HiveReauthRequired,
                     )
-                api_call_duration = time.monotonic() - api_call_start
-                if api_call_duration > self._slow_poll_threshold:
-                    _LOGGER.debug(
-                        "get_devices - Hive API response took %.1fs — marking poll as slow.",
-                        api_call_duration,
-                    )
-                    self._last_poll_slow = True
-                else:
-                    self._last_poll_slow = False
+                if api_resp_d is None:
+                    return get_nodes_successful
                 if not str(api_resp_d["original"]).startswith("2"):
                     raise HTTPException
                 if api_resp_d["parsed"] is None:
@@ -178,7 +181,7 @@ class PollingMixin:
             for hive_type_key in api_resp_p:
                 if hive_type_key == "user":
                     self.data.user = api_resp_p[hive_type_key]
-                    self.config.user_id = api_resp_p[hive_type_key]["id"]
+                    self.config.user_id = api_resp_p[hive_type_key].get("id")
                 if hive_type_key == "products":
                     for a_product in api_resp_p[hive_type_key]:
                         tmp_products.update({a_product["id"]: a_product})
@@ -189,7 +192,11 @@ class PollingMixin:
                     for a_action in api_resp_p[hive_type_key]:
                         tmp_actions.update({a_action["id"]: a_action})
                 if hive_type_key == "homes":
-                    self.config.home_id = api_resp_p[hive_type_key]["homes"][0]["id"]
+                    homes_data = api_resp_p[hive_type_key]
+                    if isinstance(homes_data, dict):
+                        homes_list = homes_data.get("homes") or []
+                        if homes_list:
+                            self.config.home_id = homes_list[0]["id"]
 
             _LOGGER.debug(
                 "get_devices - API returned %d products, %d devices, %d actions.",
@@ -221,6 +228,7 @@ class PollingMixin:
             HiveApiError,
             ConnectionError,
             HTTPException,
+            KeyError,
         ) as err:
             _LOGGER.error("Failed to fetch devices: %s", err)
             self.config.last_update = (

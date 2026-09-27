@@ -7,6 +7,7 @@ These mixins preserve that API so the integration does not need to be updated.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from .hivedataclasses import Device
@@ -138,6 +139,7 @@ class SessionCompatMixin:
         """Backwards-compatible alias for update_data."""
         return await self.update_data(device)  # type: ignore[attr-defined]
 
-    async def updateInterval(self, new_interval: int):  # pylint: disable=invalid-name,unused-argument
+    async def updateInterval(self, new_interval: int):  # pylint: disable=invalid-name
         """Backwards-compatible alias for Home Assistant Scan Interval."""
+        self.config.scan_interval = timedelta(seconds=new_interval)  # type: ignore[attr-defined]
         return True

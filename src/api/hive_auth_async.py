@@ -17,12 +17,14 @@ import botocore
 
 from ..helper.hive_exceptions import (
     HiveApiError,
+    HiveConnectionError,
     HiveFailedToRefreshTokens,
     HiveInvalid2FACode,
     HiveInvalidDeviceAuthentication,
     HiveInvalidPassword,
     HiveInvalidUsername,
     HiveRefreshTokenExpired,
+    HiveUnknownConfiguration,
 )
 from .device_registration import DeviceRegistrationMixin
 from .hive_api import HiveApi
@@ -58,17 +60,10 @@ class HiveAuthAsync(DeviceRegistrationMixin):
         device_group_key: str | None = None,
         device_key: str | None = None,
         device_password: str | None = None,
-        pool_region: str | None = None,
         client_secret: str | None = None,
     ):
         """Initialise async auth."""
-        if pool_region is not None:
-            raise ValueError(
-                "pool_region and client should not both be specified "
-                "(region should be passed to the boto3 client instead)"
-            )
-
-        self.loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
+        self.loop: asyncio.AbstractEventLoop | None = None
         self.username = username
         self.password = password
         self.device_group_key: str | None = device_group_key
@@ -95,10 +90,19 @@ class HiveAuthAsync(DeviceRegistrationMixin):
 
     async def async_init(self):
         """Initialise async variables."""
+        self.loop = asyncio.get_running_loop()
         self.data = await self.loop.run_in_executor(None, self.api.get_login_info)
+        if not self.data:
+            raise HiveUnknownConfiguration("SSO login page returned no data")
         self._pool_id = self.data.get("UPID")
         self._client_id = self.data.get("CLIID")
-        self._region = self.data.get("REGION").split("_")[0]
+        region_raw = self.data.get("REGION")
+        if not self._pool_id or not region_raw:
+            raise HiveUnknownConfiguration(
+                "SSO login page did not return required pool/region data"
+            )
+        self._region = region_raw.split("_")[0]
+        # Cognito USER_SRP_AUTH does not use IAM credentials — boto3 requires non-None values.
         self.client = await self.loop.run_in_executor(
             None,
             functools.partial(
@@ -128,6 +132,25 @@ class HiveAuthAsync(DeviceRegistrationMixin):
         random_long_int = get_random(128)
         return random_long_int % self.big_n
 
+    def _new_srp_ephemeral(self) -> None:
+        """Generate a fresh SRP client ephemeral (a, A) pair.
+
+        SRP ephemerals must not be reused across handshakes, so this is
+        called at the start of every authentication attempt.
+        """
+        self.small_a_value = self.generate_random_small_a()
+        self.large_a_value = self.calculate_a()
+
+    def _store_auth_result(self, result: dict) -> None:
+        """Store tokens and any new device keys from an AuthenticationResult."""
+        auth_result = result["AuthenticationResult"]
+        self.access_token = auth_result["AccessToken"]
+        self.token_created = datetime.datetime.now()
+        if "NewDeviceMetadata" in auth_result:
+            self.device_group_key = auth_result["NewDeviceMetadata"]["DeviceGroupKey"]
+            self.device_key = auth_result["NewDeviceMetadata"]["DeviceKey"]
+            _LOGGER.debug("Device keys stored successfully.")
+
     def calculate_a(self):
         """
         Calculate the client's public value A.
@@ -156,6 +179,8 @@ class HiveAuthAsync(DeviceRegistrationMixin):
         u_value = calculate_u(self.large_a_value, server_b_value)
         if u_value == 0:
             raise ValueError("U cannot be zero.")
+        if not self._pool_id or "_" not in self._pool_id:
+            raise HiveUnknownConfiguration(f"Invalid pool ID format: {self._pool_id!r}")
         pool_id = self._pool_id.split("_")[1]
         username_password = f"{pool_id}{username}:{password}"
         username_password_hash = hash_sha256(username_password.encode("utf-8"))
@@ -255,7 +280,7 @@ class HiveAuthAsync(DeviceRegistrationMixin):
 
         return response
 
-    async def login(self):  # noqa: PLR0912
+    async def login(self):  # noqa: PLR0912, PLR0915  # pylint: disable=too-many-statements
         """Login into a Hive account - handles initial SRP auth only."""
         if self.use_file:
             _LOGGER.debug("login - Using file-based authentication.")
@@ -264,6 +289,7 @@ class HiveAuthAsync(DeviceRegistrationMixin):
         if self.client is None:
             await self.async_init()
 
+        self._new_srp_ephemeral()
         auth_params = await self.get_auth_params()
         response = None
         result = None
@@ -279,15 +305,22 @@ class HiveAuthAsync(DeviceRegistrationMixin):
                 ),
             )
         except botocore.exceptions.ClientError as err:
-            if err.__class__.__name__ == "UserNotFoundException":
+            code = (err.response or {}).get("Error", {}).get("Code", "")
+            if code == "UserNotFoundException":
                 _LOGGER.error("Cognito auth failed: user not found.")
                 raise HiveInvalidUsername from err
+            _LOGGER.error("Cognito auth failed: %s", code)
+            raise HiveApiError from err
         except botocore.exceptions.EndpointConnectionError as err:
-            if err.__class__.__name__ == "EndpointConnectionError":
-                _LOGGER.error("Cognito auth failed: cannot reach endpoint.")
-                raise HiveApiError from err
+            _LOGGER.error("Cognito auth failed: cannot reach endpoint.")
+            raise HiveApiError from err
 
-        if response["ChallengeName"] == self.PASSWORD_VERIFIER_CHALLENGE:
+        if "AuthenticationResult" in response:
+            _LOGGER.debug("login - Authenticated directly without a challenge.")
+            self._store_auth_result(response)
+            return response
+
+        if response.get("ChallengeName") == self.PASSWORD_VERIFIER_CHALLENGE:
             _LOGGER.debug("login - Processing PASSWORD_VERIFIER challenge.")
             challenge_response = await self.process_challenge(
                 response["ChallengeParameters"]
@@ -303,38 +336,29 @@ class HiveAuthAsync(DeviceRegistrationMixin):
                     ),
                 )
             except botocore.exceptions.ClientError as err:
-                if err.__class__.__name__ == "NotAuthorizedException":
+                code = (err.response or {}).get("Error", {}).get("Code", "")
+                if code == "NotAuthorizedException":
                     _LOGGER.error("Cognito auth challenge failed: not authorised.")
                     raise HiveInvalidPassword from err
-                if err.__class__.__name__ == "ResourceNotFoundException":
+                if code == "ResourceNotFoundException":
                     _LOGGER.error(
                         "Cognito auth challenge failed: device resource not found."
                     )
                     raise HiveInvalidDeviceAuthentication from err
+                _LOGGER.error("Cognito auth challenge failed: %s", code)
+                raise HiveApiError from err
             except botocore.exceptions.EndpointConnectionError as err:
-                if err.__class__.__name__ == "EndpointConnectionError":
-                    _LOGGER.error(
-                        "Cognito auth challenge failed: cannot reach endpoint."
-                    )
-                    raise HiveApiError from err
+                _LOGGER.error("Cognito auth challenge failed: cannot reach endpoint.")
+                raise HiveApiError from err
 
             _LOGGER.debug("login - SRP auth challenge completed successfully.")
 
             if "AuthenticationResult" in result:
-                self.access_token = result["AuthenticationResult"]["AccessToken"]
-                self.token_created = datetime.datetime.now()
-                if "NewDeviceMetadata" in result["AuthenticationResult"]:
-                    self.device_group_key = result["AuthenticationResult"][
-                        "NewDeviceMetadata"
-                    ]["DeviceGroupKey"]
-                    self.device_key = result["AuthenticationResult"][
-                        "NewDeviceMetadata"
-                    ]["DeviceKey"]
-                    _LOGGER.debug("login - Device keys stored successfully.")
+                self._store_auth_result(result)
 
             return result
 
-        challenge_name = response["ChallengeName"]
+        challenge_name = response.get("ChallengeName")
         _LOGGER.error("Unsupported Cognito challenge: %s", challenge_name)
         raise NotImplementedError(f"The {challenge_name} challenge is not supported")
 
@@ -349,6 +373,7 @@ class HiveAuthAsync(DeviceRegistrationMixin):
         if self.client is None:
             await self.async_init()
 
+        self._new_srp_ephemeral()
         auth_params = await self.get_auth_params(is_device_login=True)
 
         _LOGGER.debug("device_login - Processing DEVICE_SRP_AUTH challenge.")
@@ -385,10 +410,8 @@ class HiveAuthAsync(DeviceRegistrationMixin):
                 raise HiveInvalidDeviceAuthentication from err
             raise
         except botocore.exceptions.EndpointConnectionError as err:
-            if err.__class__.__name__ == "EndpointConnectionError":
-                _LOGGER.error("Device login failed: cannot reach endpoint.")
-                raise HiveApiError from err
-            raise HiveInvalidDeviceAuthentication from err
+            _LOGGER.error("Device login failed: cannot reach endpoint.")
+            raise HiveApiError from err
 
         _LOGGER.debug("device_login - Device authentication completed successfully.")
         return result
@@ -413,26 +436,18 @@ class HiveAuthAsync(DeviceRegistrationMixin):
                     },
                 ),
             )
-            self.access_token = result["AuthenticationResult"]["AccessToken"]
-            self.token_created = datetime.datetime.now()
-            if "NewDeviceMetadata" in result["AuthenticationResult"]:
-                self.device_group_key = result["AuthenticationResult"][
-                    "NewDeviceMetadata"
-                ]["DeviceGroupKey"]
-                self.device_key = result["AuthenticationResult"]["NewDeviceMetadata"][
-                    "DeviceKey"
-                ]
+            if result and "AuthenticationResult" in result:
+                self._store_auth_result(result)
         except botocore.exceptions.ClientError as err:
-            if err.__class__.__name__ in (
-                "NotAuthorizedException",
-                "CodeMismatchException",
-            ):
+            code = (err.response or {}).get("Error", {}).get("Code", "")
+            if code in ("NotAuthorizedException", "CodeMismatchException"):
                 _LOGGER.error("2FA code rejected by Cognito.")
                 raise HiveInvalid2FACode from err
+            _LOGGER.error("2FA failed: %s", code)
+            raise HiveApiError from err
         except botocore.exceptions.EndpointConnectionError as err:
-            if err.__class__.__name__ == "EndpointConnectionError":
-                _LOGGER.error("2FA failed: cannot reach Cognito endpoint.")
-                raise HiveApiError from err
+            _LOGGER.error("2FA failed: cannot reach Cognito endpoint.")
+            raise HiveApiError from err
 
         _LOGGER.debug("sms_2fa - 2FA authentication completed successfully.")
         return result
@@ -478,11 +493,10 @@ class HiveAuthAsync(DeviceRegistrationMixin):
             )
             raise HiveFailedToRefreshTokens from err
         except botocore.exceptions.EndpointConnectionError as err:
-            if err.__class__.__name__ == "EndpointConnectionError":
-                _LOGGER.error(
-                    "refresh_token - Token refresh failed: cannot reach Cognito endpoint."
-                )
-                raise HiveApiError from err
+            _LOGGER.error(
+                "refresh_token - Token refresh failed: cannot reach Cognito endpoint."
+            )
+            raise HiveConnectionError from err
 
         _LOGGER.debug("refresh_token - Cognito token refresh completed successfully.")
         return result

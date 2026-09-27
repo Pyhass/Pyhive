@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ..helper.const import DEVICES, EXPECTED_DEVICE_DATA_LENGTH, HIVE_TYPES, PRODUCTS
-from ..helper.hive_exceptions import HiveReauthRequired, HiveUnknownConfiguration
+from ..helper.hive_exceptions import HiveConnectionError, HiveUnknownConfiguration
 from ..helper.hivedataclasses import Device
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
@@ -148,10 +148,15 @@ class DiscoveryMixin:
                 self.auth.password = config["password"]
 
             if "device_data" in config and not self.config.file:
-                self.auth.device_group_key = config["device_data"][0]
-                self.auth.device_key = config["device_data"][1]
-                self.auth.device_password = config["device_data"][2]
                 device_data = config["device_data"]
+                if len(device_data) < EXPECTED_DEVICE_DATA_LENGTH:
+                    raise HiveUnknownConfiguration(
+                        "device_data must contain device_group_key, "
+                        "device_key and device_password"
+                    )
+                self.auth.device_group_key = device_data[0]
+                self.auth.device_key = device_data[1]
+                self.auth.device_password = device_data[2]
                 if len(device_data) > EXPECTED_DEVICE_DATA_LENGTH:
                     token_created = device_data[3]
                     if token_created:
@@ -160,13 +165,15 @@ class DiscoveryMixin:
             if not self.config.file and "tokens" not in config:
                 raise HiveUnknownConfiguration
 
-        await self.get_devices("No_ID")  # type: ignore[attr-defined]
+        fetched = await self.get_devices("No_ID")  # type: ignore[attr-defined]
 
         if not self.data.devices or not self.data.products:
-            _LOGGER.error(
-                "No devices or products returned from Hive API, reauthentication required."
-            )
-            raise HiveReauthRequired
+            if not fetched:
+                # The request failed rather than returning an empty account,
+                # so let the caller retry instead of treating it as bad config.
+                raise HiveConnectionError("Could not fetch devices from Hive")
+            _LOGGER.error("No devices or products returned from Hive API.")
+            raise HiveUnknownConfiguration
 
         return await self.create_devices()
 
@@ -237,7 +244,7 @@ class DiscoveryMixin:
                     )
 
             if device_type in hive_type:
-                self.config.battery.append(d["id"])
+                self.config.battery.add(d.get("id", a_device))
                 _LOGGER.debug(
                     "create_devices - Added device %s to battery monitoring list",
                     device_name,
@@ -313,7 +320,7 @@ class DiscoveryMixin:
                     )
 
             if product_type in hive_type:
-                self.config.mode.append(p["id"])
+                self.config.mode.add(p.get("id", a_product))
                 _LOGGER.debug(
                     "create_devices - Added product %s to mode list", product_name
                 )

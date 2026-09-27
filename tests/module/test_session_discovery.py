@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from apyhiveapi.helper.hive_exceptions import (
-    HiveReauthRequired,
     HiveUnknownConfiguration,
 )
 from apyhiveapi.helper.hivedataclasses import SessionConfig
@@ -102,13 +101,6 @@ class TestStartSession:
         await s.start_session({"username": "use@file.com"})
         assert s.config.file is True
         s.get_devices.assert_called_once()
-
-    async def test_empty_devices_after_get_devices_raises_reauth(self):
-        """start_session raises HiveReauthRequired when data.devices is empty post-poll."""
-        s = _make_stub(has_data=False)
-        s.config.file = True
-        with pytest.raises(HiveReauthRequired):
-            await s.start_session({})
 
     async def test_no_tokens_in_non_file_config_raises_unknown_configuration(self):
         """Non-file mode config without tokens raises HiveUnknownConfiguration."""

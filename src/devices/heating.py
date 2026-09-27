@@ -48,6 +48,36 @@ class HiveHeating(BoostMixin, BaseDeviceHandler):
             return self._get_product_state(device, "props", "maxHeat")
         return 32
 
+    def _track_minmax(self, hive_id: str, temperature: float) -> None:
+        """Record today's and since-restart min/max temperatures for a device."""
+        today = str(datetime.date(datetime.now()))
+        min_max = self.session.data.minMax.get(hive_id)
+
+        if min_max is None:
+            self.session.data.minMax[hive_id] = {
+                "TodayMin": temperature,
+                "TodayMax": temperature,
+                "TodayDate": today,
+                "RestartMin": temperature,
+                "RestartMax": temperature,
+            }
+            return
+
+        if min_max["TodayDate"] == today:
+            min_max["TodayMin"] = min(min_max["TodayMin"], temperature)
+            min_max["TodayMax"] = max(min_max["TodayMax"], temperature)
+        else:
+            min_max.update(
+                {
+                    "TodayMin": temperature,
+                    "TodayMax": temperature,
+                    "TodayDate": today,
+                }
+            )
+
+        min_max["RestartMin"] = min(min_max["RestartMin"], temperature)
+        min_max["RestartMax"] = max(min_max["RestartMax"], temperature)
+
     async def get_current_temperature(self, device: Device):
         """Get heating current temperature.
 
@@ -75,41 +105,7 @@ class HiveHeating(BoostMixin, BaseDeviceHandler):
                 )
                 return None
 
-            if device.hive_id in self.session.data.minMax:
-                if self.session.data.minMax[device.hive_id]["TodayDate"] == str(
-                    datetime.date(datetime.now())
-                ):
-                    self.session.data.minMax[device.hive_id]["TodayMin"] = min(
-                        self.session.data.minMax[device.hive_id]["TodayMin"], state
-                    )
-
-                    self.session.data.minMax[device.hive_id]["TodayMax"] = max(
-                        self.session.data.minMax[device.hive_id]["TodayMax"], state
-                    )
-                else:
-                    data = {
-                        "TodayMin": state,
-                        "TodayMax": state,
-                        "TodayDate": str(datetime.date(datetime.now())),
-                    }
-                    self.session.data.minMax[device.hive_id].update(data)
-
-                self.session.data.minMax[device.hive_id]["RestartMin"] = min(
-                    self.session.data.minMax[device.hive_id]["RestartMin"], state
-                )
-
-                self.session.data.minMax[device.hive_id]["RestartMax"] = max(
-                    self.session.data.minMax[device.hive_id]["RestartMax"], state
-                )
-            else:
-                data = {
-                    "TodayMin": state,
-                    "TodayMax": state,
-                    "TodayDate": str(datetime.date(datetime.now())),
-                    "RestartMin": state,
-                    "RestartMax": state,
-                }
-                self.session.data.minMax[device.hive_id] = data
+            self._track_minmax(device.hive_id, state)
 
             final = round(state, 1)
         except KeyError as e:
@@ -170,15 +166,16 @@ class HiveHeating(BoostMixin, BaseDeviceHandler):
         """
         state = None
         final = None
+        device_name = device.ha_name
 
         try:
             data = self.session.data.products[device.hive_id]
             state = data["state"]["mode"]
             if state == "BOOST":
-                state = data["props"]["previous"]["mode"]
+                state = self._get_product_state(device, "props", "previous", "mode")
             final = HIVETOHA[self.heating_type].get(state, state)
         except KeyError as e:
-            _LOGGER.error(e)
+            _LOGGER.error("get_mode - KeyError getting mode for %s: %s", device_name, e)
 
         return final
 
@@ -284,7 +281,18 @@ class HiveHeating(BoostMixin, BaseDeviceHandler):
         """
         min_temp = await self.get_min_temperature(device)
         max_temp = await self.get_max_temperature(device)
-        if not (int(mins) > 0 and min_temp <= int(temp) <= max_temp):
+        try:
+            mins_value = int(mins)
+            temp_value = float(temp)
+        except (ValueError, TypeError):
+            _LOGGER.warning(
+                "set_boost_on - Invalid boost inputs for %s: mins=%r temp=%r",
+                device.ha_name,
+                mins,
+                temp,
+            )
+            return None
+        if not (mins_value > 0 and min_temp <= temp_value <= max_temp):
             return None
         _LOGGER.debug(
             "set_boost_on - Setting heating boost ON for %s: %s mins at %s degrees.",
@@ -317,6 +325,12 @@ class HiveHeating(BoostMixin, BaseDeviceHandler):
             "set_boost_off - Setting heating boost OFF for %s.", device.ha_name
         )
         prev_mode = self._get_product_state(device, "props", "previous", "mode")
+        if prev_mode is None:
+            _LOGGER.warning(
+                "set_boost_off - Cannot determine previous mode for %s, skipping.",
+                device.ha_name,
+            )
+            return False
         kwargs = {"mode": prev_mode}
         if prev_mode in ("MANUAL", "OFF"):
             kwargs["target"] = (

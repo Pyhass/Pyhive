@@ -8,7 +8,6 @@ import time
 from typing import Any
 
 from .const import HIVE_TYPES
-from .hivedataclasses import Device
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,7 +25,6 @@ def epoch_time(date_time: Any, pattern: str, action: str) -> Any:
         Converted value, or ``None`` if *action* is unrecognised.
     """
     if action == "to_epoch":
-        pattern = "%d.%m.%Y %H:%M:%S"
         return int(time.mktime(time.strptime(str(date_time), pattern)))
     if action == "from_epoch":
         return datetime.datetime.fromtimestamp(int(date_time)).strftime(pattern)
@@ -256,8 +254,9 @@ class HiveHelper:
                 if slot_time_date_dt <= date_time_now:
                     slot_time_date_dt = slot_time_date_dt + datetime.timedelta(days=7)
 
-                current_slot_custom["Start_DateTime"] = slot_time_date_dt
-                full_schedule_list.append(current_slot_custom)
+                slot_copy = dict(current_slot_custom)
+                slot_copy["Start_DateTime"] = slot_time_date_dt
+                full_schedule_list.append(slot_copy)
 
         fsl_sorted = sorted(
             full_schedule_list,
@@ -296,19 +295,6 @@ class HiveHelper:
             )
 
         return schedule_now_and_next
-
-    def get_heat_on_demand_device(self, device: Device):
-        """Use TRV device to get the linked thermostat device.
-
-        Args:
-            device ([dictionary]): [The TRV device to lookup.]
-
-        Returns:
-            [dictionary]: [Gets the thermostat device linked to TRV.]
-        """
-        trv = self.session.data.products.get(device["HiveID"])
-        thermostat = self.session.data.products.get(trv["state"]["zone"])
-        return thermostat
 
     def sanitize_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Return a copy of payload with sensitive values masked for logs."""

@@ -29,8 +29,8 @@ def _make_attrs(devices=None, products=None, battery=None, mode=None):
         }
     )
     config = SessionConfig()
-    config.battery = battery or []
-    config.mode = mode or []
+    config.battery = set(battery) if battery else set()
+    config.mode = set(mode) if mode else set()
     session.config = config
     session.helper = MagicMock()
     session.helper.error_check = AsyncMock()
@@ -92,13 +92,11 @@ class TestGetBattery:
         assert await attrs.get_battery("nope") is None
 
     @pytest.mark.asyncio
-    async def test_calls_error_check(self):
-        """error_check should be called once with the device id, type, and battery level."""
+    async def test_returns_correct_battery_level(self):
+        """Battery level is returned as the raw integer from props."""
         attrs = _make_attrs(devices={"d1": {"props": {"battery": BATTERY_50}}})
-        await attrs.get_battery("d1")
-        attrs.session.helper.error_check.assert_awaited_once_with(
-            "d1", "Attribute", BATTERY_50
-        )
+        result = await attrs.get_battery("d1")
+        assert result == BATTERY_50
 
     @pytest.mark.asyncio
     async def test_battery_zero_returned(self):
@@ -136,18 +134,18 @@ class TestGetMode:
         assert result == "MANUAL"
 
     @pytest.mark.asyncio
-    async def test_true_value_maps_to_online(self):
-        """HIVETOHA["Attribute"][True] == "Online"."""
+    async def test_true_value_returned_directly(self):
+        """get_mode returns the raw mode value (True) without HIVETOHA translation."""
         attrs = _make_attrs(products={"p1": {"state": {"mode": True}}})
         result = await attrs.get_mode("p1")
-        assert result == "Online"
+        assert result is True
 
     @pytest.mark.asyncio
-    async def test_false_value_maps_to_offline(self):
-        """HIVETOHA["Attribute"][False] == "Offline"."""
+    async def test_false_value_returned_directly(self):
+        """get_mode returns the raw mode value (False) without HIVETOHA translation."""
         attrs = _make_attrs(products={"p1": {"state": {"mode": False}}})
         result = await attrs.get_mode("p1")
-        assert result == "Offline"
+        assert result is False
 
 
 # ---------------------------------------------------------------------------
@@ -259,3 +257,31 @@ class TestStateAttributes:
         assert result["available"] is True
         assert result["battery"] == "90%"
         assert result["mode"] == "SCHEDULE"
+
+
+class TestGetModeNoOp:
+    """HiveAttributes.get_mode must return mode string directly (no HIVETOHA lookup)."""
+
+    async def test_get_mode_returns_mode_string_unchanged(self):
+        """get_mode returns the raw mode string, not a boolean-keyed HIVETOHA lookup."""
+        session = MagicMock()
+        session.data.products = {"p1": {"state": {"mode": "SCHEDULE"}}}
+        attr = HiveAttributes(session)
+
+        result = await attr.get_mode("p1")
+        assert result == "SCHEDULE"
+
+
+class TestGetBatteryNoDeadCall:
+    """HiveAttributes.get_battery must not call error_check with integer state."""
+
+    async def test_get_battery_returns_value_without_error_check_side_effects(self):
+        """get_battery returns the battery level; error_check is not called with int."""
+        session = MagicMock()
+        session.data.devices = {"d1": {"props": {"battery": 85}}}
+        attr = HiveAttributes(session)
+        session.helper.error_check = AsyncMock()
+
+        result = await attr.get_battery("d1")
+        assert result == 85
+        session.helper.error_check.assert_not_called()

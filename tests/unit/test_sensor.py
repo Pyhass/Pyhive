@@ -2,7 +2,7 @@
 
 # pylint: disable=protected-access
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from apyhiveapi.devices.sensor import Sensor
 from apyhiveapi.helper.hivedataclasses import Device, SessionConfig
@@ -146,6 +146,39 @@ class TestGetSensor:
         assert "state" in result.status
         session.attr.state_attributes.assert_awaited_once()
 
+    async def test_contact_sensor_uses_device_id_not_hive_id_for_props(self):
+        """HIVE_TYPES['Sensor'] branch must look up data.devices by device_id.
+
+        Before the fix, line 160 used hive_id; data was always {} so
+        device.parent_device was always None even when the device existed.
+        """
+        hive_id = "prod-abc"
+        device_id = "dev-xyz"  # deliberately different from hive_id
+
+        products = {}  # contactsensor is NOT in products
+        devices = {
+            device_id: {
+                "props": {"online": True, "signal": -70},
+                "parent": "hub-parent-id",
+            }
+        }
+        session = _make_session(products=products, devices=devices)
+        session.attr.online_offline = AsyncMock(return_value=True)
+
+        device = _make_device(
+            hive_id=hive_id, device_id=device_id, hive_type="contactsensor"
+        )
+        device.device_data = {"online": True}
+
+        sensor = Sensor(session)
+        with patch.object(sensor, "get_state", new=AsyncMock(return_value="CLOSED")):
+            result = await sensor.get_sensor(device)
+
+        assert result is not None
+        assert device.parent_device == "hub-parent-id", (
+            "parent_device must come from data.devices[device_id], not hive_id lookup"
+        )
+
 
 class TestGetState:
     """Tests for HiveSensor.get_state covering the motionsensor branch (lines 37-42)."""
@@ -170,3 +203,90 @@ class TestGetState:
         state = await sensor.get_state(device)
 
         assert state is True
+
+
+# ===========================================================================
+# Migrated from test_remaining_branches.py
+# ===========================================================================
+
+
+class TestSensorGetStateKeyError:
+    """Lines 37->42: KeyError in HiveSensor.get_state."""
+
+    async def test_get_state_missing_type_key_returns_none(self):
+        """Product with no 'type' key causes KeyError → final stays None."""
+        session = _make_session({"sens-1": {}})
+        sensor = Sensor(session=session)
+        d = _make_device(hive_id="sens-1", device_id="dev-1", hive_type="contactsensor")
+        result = await sensor.get_state(d)
+        assert result is None
+
+    async def test_get_state_missing_props_key_returns_none(self):
+        """contactsensor product without 'props' causes KeyError → None."""
+        session = _make_session({"sens-1": {"type": "contactsensor"}})
+        sensor = Sensor(session=session)
+        d = _make_device(hive_id="sens-1", device_id="dev-1", hive_type="contactsensor")
+        result = await sensor.get_state(d)
+        assert result is None
+
+
+class TestSensorGetStateUnknownType:
+    """Lines 37->42: data['type'] is neither contactsensor nor motionsensor."""
+
+    async def test_unknown_type_returns_none(self):
+        """Product with type 'hub' skips both if/elif → final stays None."""
+        session = _make_session({"sens-1": {"type": "hub", "props": {}}})
+        sensor = Sensor(session=session)
+        d = _make_device(hive_id="sens-1", device_id="dev-1", hive_type="contactsensor")
+        result = await sensor.get_state(d)
+        assert result is None
+
+
+class TestSensorGetSensorCacheMiss:
+    """Lines 92->98: should_use_cached_data=True but cached is None."""
+
+    async def test_cached_none_falls_through(self):
+        session = _make_session(
+            products={"sens-1": {"type": "contactsensor", "props": {"status": "OPEN"}}},
+            devices={"dev-1": {"props": {"online": True}, "type": "contactsensor"}},
+        )
+        session.should_use_cached_data.return_value = True
+        session.get_cached_device.return_value = None
+        sensor = Sensor(session=session)
+        d = _make_device(hive_id="sens-1", device_id="dev-1", hive_type="contactsensor")
+        result = await sensor.get_sensor(d)
+        assert result is not None
+        session.attr.online_offline.assert_called_once()
+
+
+class TestSensorGetSensorNoDataFallthrough:
+    """Lines 119->122: device_id not in devices AND hive_id not in products."""
+
+    async def test_neither_match_continues_with_empty_data(self):
+        """data stays empty dict when neither lookup succeeds."""
+        session = _make_session(products={}, devices={})
+        sensor = Sensor(session=session)
+        d = _make_device(
+            hive_id="unknown-hive",
+            device_id="unknown-dev",
+            hive_type="contactsensor",
+        )
+        result = await sensor.get_sensor(d)
+        # Should not raise; result will be the device (set_cached_device returns it)
+        assert result is not None
+
+
+class TestSensorGetSensorUnknownHiveType:
+    """Lines 135->146: hive_type not in sensor_commands and not in HIVE_TYPES['Sensor']."""
+
+    async def test_hive_type_not_in_either_dict_skips_both_branches(self):
+        """activeplug is neither in sensor_commands nor HIVE_TYPES['Sensor']."""
+        session = _make_session(
+            devices={"dev-1": {"props": {"online": True}, "type": "activeplug"}}
+        )
+        sensor = Sensor(session=session)
+        d = _make_device(hive_id="dev-1", device_id="dev-1", hive_type="activeplug")
+        d.device_data = {"online": True}
+        result = await sensor.get_sensor(d)
+        # Neither branch sets device.status; device returned as-is via set_cached_device
+        assert result is not None

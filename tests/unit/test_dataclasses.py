@@ -112,12 +112,42 @@ class TestSessionConfig:
         c = SessionConfig()
         assert c.scan_interval == timedelta(seconds=120)
 
-    def test_default_battery_is_empty_list(self):
-        """Test battery defaults to empty list."""
+    def test_default_battery_is_empty_set(self):
+        """Test battery defaults to empty set."""
         c = SessionConfig()
-        assert c.battery == []
+        assert c.battery == set()
 
     def test_username_stored(self):
         """Test username can be set and retrieved."""
         c = SessionConfig(username="user@example.com")
         assert c.username == "user@example.com"
+
+
+class TestSessionConfigCollectionTypes:
+    """battery and mode must be sets for O(1) membership checks."""
+
+    def test_battery_is_set(self):
+        """SessionConfig.battery is a set (not a list)."""
+        config = SessionConfig()
+        assert isinstance(config.battery, set), (
+            f"Expected set, got {type(config.battery).__name__}"
+        )
+
+    def test_mode_is_set(self):
+        """SessionConfig.mode is a set (not a list)."""
+        config = SessionConfig()
+        assert isinstance(config.mode, set), (
+            f"Expected set, got {type(config.mode).__name__}"
+        )
+
+    def test_battery_supports_membership_check(self):
+        """Can check membership in battery using 'in' after add."""
+        config = SessionConfig()
+        config.battery.add("d1")
+        assert "d1" in config.battery
+
+    def test_mode_supports_membership_check(self):
+        """Can check membership in mode using 'in' after add."""
+        config = SessionConfig()
+        config.mode.add("p1")
+        assert "p1" in config.mode

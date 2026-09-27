@@ -60,29 +60,6 @@ HIVE_TYPES = {
     "Sensor": ["motionsensor", "contactsensor"],
     "Switch": ["activeplug"],
 }
-sensor_commands = {
-    "SMOKE_CO": lambda s, d: s.session.hub.get_smoke_status(d),
-    "DOG_BARK": lambda s, d: s.session.hub.get_dog_bark_status(d),
-    "GLASS_BREAK": lambda s, d: s.session.hub.get_glass_break_status(d),
-    "Current_Temperature": lambda s, d: s.session.heating.get_current_temperature(d),
-    "Heating_Current_Temperature": lambda s, d: (
-        s.session.heating.get_current_temperature(d)
-    ),
-    "Heating_Target_Temperature": lambda s, d: s.session.heating.get_target_temperature(
-        d
-    ),
-    "Heating_State": lambda s, d: s.session.heating.get_state(d),
-    "Heating_Mode": lambda s, d: s.session.heating.get_mode(d),
-    "Heating_Boost": lambda s, d: s.session.heating.get_boost_status(d),
-    "Hotwater_State": lambda s, d: s.session.hotwater.get_state(d),
-    "Hotwater_Mode": lambda s, d: s.session.hotwater.get_mode(d),
-    "Hotwater_Boost": lambda s, d: s.session.hotwater.get_boost(d),
-    "Battery": lambda s, d: s.session.attr.get_battery(d.device_id),
-    "Mode": lambda s, d: s.session.attr.get_mode(d.hive_id),
-    "Availability": lambda s, d: s.online(d),
-    "Connectivity": lambda s, d: s.online(d),
-    "Power": lambda s, d: s.session.switch.get_power_usage(d),
-}
 
 PRODUCTS = {
     "sense": [

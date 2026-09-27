@@ -95,6 +95,39 @@ class TestGetDevicesFileMode:
 
 
 # ---------------------------------------------------------------------------
+# get_devices — malformed API responses
+# ---------------------------------------------------------------------------
+
+
+class TestGetDevicesMalformedResponse:
+    """Hostile/partial response shapes must not escape as raw KeyError."""
+
+    async def test_user_without_id_still_succeeds(self):
+        """A user object with no 'id' key must not crash the poll."""
+        p = _make_stub()
+        p.tokens = MagicMock()
+        p.api.get_all = AsyncMock(
+            return_value={"original": 200, "parsed": {"user": {"name": "x"}}}
+        )
+        result = await p.get_devices("No_ID")
+        assert result is True
+        assert p.config.user_id is None
+
+    async def test_product_without_id_returns_false(self):
+        """A product entry with no 'id' key fails the poll gracefully."""
+        p = _make_stub()
+        p.tokens = MagicMock()
+        p.api.get_all = AsyncMock(
+            return_value={
+                "original": 200,
+                "parsed": {"products": [{"type": "heating"}]},
+            }
+        )
+        result = await p.get_devices("No_ID")
+        assert result is False
+
+
+# ---------------------------------------------------------------------------
 # get_devices — tokens path
 # ---------------------------------------------------------------------------
 

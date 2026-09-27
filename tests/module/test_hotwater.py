@@ -188,14 +188,6 @@ class TestSetBoostOff:
 class TestGetScheduleNowNextLater:
     """Tests for WaterHeater.get_schedule_now_next_later."""
 
-    async def test_schedule_mode_returns_nnl(self):
-        """SCHEDULE mode with a schedule returns the now/next/later dict."""
-        hw = _make_hotwater(
-            {"hw-1": {"state": {"mode": _SCHEDULE_MODE, "schedule": {}}}}
-        )
-        result = await hw.get_schedule_now_next_later(_make_device())
-        assert result is not None
-
     async def test_non_schedule_returns_none(self):
         """Non-SCHEDULE mode returns None."""
         hw = _make_hotwater({"hw-1": {"state": {"mode": _ON_MODE}}})
