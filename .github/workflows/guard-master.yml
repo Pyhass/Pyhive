@@ -4,6 +4,10 @@ on:
   pull_request:
     branches: [master]
 
+# Least privilege: the default GITHUB_TOKEN is read-only.
+permissions:
+  contents: read
+
 jobs:
   source-branch-is-dev:
     runs-on: ubuntu-latest
