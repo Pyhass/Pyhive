@@ -7,6 +7,7 @@ from apyhiveapi.helper.hive_exceptions import (
     HiveAuthCredentialError,
     HiveAuthError,
     HiveConfigurationError,
+    HiveConnectionError,
     HiveError,
     HiveFailedToRefreshTokens,
     HiveInvalid2FACode,
@@ -35,6 +36,10 @@ class TestHiveErrorBase:
 
     def test_hive_failed_to_refresh_is_hive_api_error(self):
         assert issubclass(HiveFailedToRefreshTokens, HiveApiError)
+
+    def test_hive_connection_error_is_hive_api_error(self):
+        # Existing `except HiveApiError` handlers keep catching it.
+        assert issubclass(HiveConnectionError, HiveApiError)
 
     def test_hive_reauth_required_is_hive_error(self):
         assert issubclass(HiveReauthRequired, HiveError)

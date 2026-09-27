@@ -4,7 +4,9 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from apyhiveapi.api.hive_api import HiveApi
+from apyhiveapi.helper.hive_exceptions import HiveConnectionError
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -118,7 +120,14 @@ class TestRequest:
     def test_unsupported_method_raises_value_error(self):
         api = _make_api()
         with pytest.raises(ValueError, match="Unsupported request type"):
+            api.request("PATCH", "https://example.com/")
+
+    def test_delete_method_calls_requests_delete(self):
+        api = _make_api()
+        with patch("apyhiveapi.api.hive_api.requests.delete") as mock_delete:
+            mock_delete.return_value = _make_mock_response(200)
             api.request("DELETE", "https://example.com/")
+            mock_delete.assert_called_once()
 
     def test_exception_is_reraised(self):
         api = _make_api()
@@ -197,15 +206,30 @@ class TestGetLoginInfo:
         # REGION mirrors UPID
         assert result["REGION"] == "eu-west-1_abc"
 
-    def test_os_error_calls_error_and_returns_none(self):
+    def test_os_error_calls_error_and_raises_connection_error(self):
         api = _make_api()
-        with patch(
-            "apyhiveapi.api.hive_api.requests.get", side_effect=OSError("net error")
+        with (
+            patch(
+                "apyhiveapi.api.hive_api.requests.get",
+                side_effect=OSError("net error"),
+            ),
+            pytest.raises(HiveConnectionError),
         ):
-            result = api.get_login_info()
+            api.get_login_info()
 
-        assert result is None
         assert api.json_return["original"] == "Error making API call"
+
+    def test_timeout_raises_connection_error(self):
+        """A read timeout on the SSO page is transient, so it must not return None."""
+        api = _make_api()
+        with (
+            patch(
+                "apyhiveapi.api.hive_api.requests.get",
+                side_effect=requests.exceptions.ReadTimeout("read timed out"),
+            ),
+            pytest.raises(HiveConnectionError),
+        ):
+            api.get_login_info()
 
     def test_runtime_error_calls_error_and_returns_none(self):
         api = _make_api()
@@ -613,6 +637,62 @@ class TestSetAction:
             api.set_action("act-1", "{}")
 
         assert api.json_return["original"] == "Error making API call"
+
+
+# ---------------------------------------------------------------------------
+# Tests: HiveApi holiday mode
+# ---------------------------------------------------------------------------
+
+
+class TestHolidayMode:
+    def test_get_holiday_mode_returns_parsed_json(self):
+        api = _make_api()
+        payload = {
+            "active": False,
+            "enabled": False,
+            "start": 1783006500000,
+            "end": 1783296000000,
+            "temperature": 12,
+            "status": "OK",
+        }
+        mock_resp = _make_mock_response(200, json_data=payload)
+
+        with patch.object(api, "request", return_value=mock_resp):
+            result = api.get_holiday_mode()
+
+        assert result["original"] == 200
+        assert result["parsed"] == payload
+
+    def test_set_holiday_mode_posts_epoch_ms_body(self):
+        api = _make_api()
+        payload = {"start": 1783767707701, "end": 1784372507701, "temperature": 12}
+        mock_resp = _make_mock_response(200, json_data=payload)
+
+        with patch.object(api, "request", return_value=mock_resp) as mock_req:
+            result = api.set_holiday_mode(1783767707701, 1784372507701, 12)
+
+        assert result["original"] == 200
+        assert result["parsed"] == payload
+        method_arg = mock_req.call_args[0][0]
+        jsc_arg = mock_req.call_args[0][2]
+        assert method_arg == "POST"
+        assert json.loads(jsc_arg) == {
+            "start": 1783767707701,
+            "end": 1784372507701,
+            "temperature": 12,
+        }
+
+    def test_cancel_holiday_mode_sends_delete(self):
+        api = _make_api()
+        mock_resp = _make_mock_response(200, json_data={"set": True})
+
+        with patch.object(api, "request", return_value=mock_resp) as mock_req:
+            result = api.cancel_holiday_mode()
+
+        assert result["original"] == 200
+        assert result["parsed"] == {"set": True}
+        method_arg = mock_req.call_args[0][0]
+        assert method_arg == "DELETE"
 
 
 # ---------------------------------------------------------------------------

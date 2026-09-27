@@ -1,6 +1,7 @@
 """Tests for session polling behaviour, HiveHub sensor status, and Hive lifecycle."""
 
 # pylint: disable=protected-access
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 from apyhiveapi import Hive
@@ -114,6 +115,59 @@ class TestHiveHubSensorStatus:
         """get_glass_break_status returns None when the product key is absent."""
         hub = _make_hub_handler({})
         assert await hub.get_glass_break_status(_make_hub_device()) is None
+
+
+class TestHiveHubHolidayMode:
+    """Tests for HiveHub holiday mode get/set/cancel methods."""
+
+    def _make_hub(self, resp):
+        session = MagicMock()
+        session.hive_refresh_tokens = AsyncMock()
+        session.api = MagicMock()
+        session.api.get_holiday_mode = AsyncMock(return_value=resp)
+        session.api.set_holiday_mode = AsyncMock(return_value=resp)
+        session.api.cancel_holiday_mode = AsyncMock(return_value=resp)
+        return HiveHub(session=session)
+
+    async def test_get_holiday_mode_returns_parsed_on_200(self):
+        payload = {
+            "active": False,
+            "enabled": False,
+            "start": 1,
+            "end": 2,
+            "temperature": 12,
+        }
+        hub = self._make_hub({"original": 200, "parsed": payload})
+        assert await hub.get_holiday_mode() == payload
+
+    async def test_get_holiday_mode_returns_none_on_failure(self):
+        hub = self._make_hub(
+            {"original": 400, "parsed": {"error": "MALFORMED_REQUEST"}}
+        )
+        assert await hub.get_holiday_mode() is None
+
+    async def test_set_holiday_mode_returns_true_on_200(self):
+        hub = self._make_hub({"original": 200, "parsed": {}})
+        start = datetime(2026, 8, 1, 12, 0, 0, tzinfo=timezone.utc)
+        end = datetime(2026, 8, 8, 12, 0, 0, tzinfo=timezone.utc)
+        assert await hub.set_holiday_mode(start, end, 12) is True
+        hub.session.api.set_holiday_mode.assert_awaited_once_with(
+            int(start.timestamp() * 1000), int(end.timestamp() * 1000), 12
+        )
+
+    async def test_set_holiday_mode_returns_false_on_failure(self):
+        hub = self._make_hub({"original": 400, "parsed": {}})
+        start = datetime(2026, 8, 1, 12, 0, 0, tzinfo=timezone.utc)
+        end = datetime(2026, 8, 8, 12, 0, 0, tzinfo=timezone.utc)
+        assert await hub.set_holiday_mode(start, end, 12) is False
+
+    async def test_cancel_holiday_mode_returns_true_on_200(self):
+        hub = self._make_hub({"original": 200, "parsed": {"set": True}})
+        assert await hub.cancel_holiday_mode() is True
+
+    async def test_cancel_holiday_mode_returns_false_on_failure(self):
+        hub = self._make_hub({"original": 400, "parsed": {}})
+        assert await hub.cancel_holiday_mode() is False
 
 
 class TestHiveLifecycle:

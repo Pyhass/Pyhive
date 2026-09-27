@@ -8,6 +8,7 @@ import botocore.exceptions
 import pytest
 from apyhiveapi.helper.hive_exceptions import (
     HiveApiError,
+    HiveConnectionError,
     HiveFailedToRefreshTokens,
     HiveInvalid2FACode,
     HiveInvalidDeviceAuthentication,
@@ -585,10 +586,10 @@ class TestRefreshToken:
             await auth.refresh_token("tok")
 
     @pytest.mark.asyncio
-    async def test_endpoint_error_raises_api_error(self):
+    async def test_endpoint_error_raises_connection_error(self):
         auth = await _make_auth()
         auth.loop.run_in_executor.side_effect = _endpoint_error()
-        with pytest.raises(HiveApiError):
+        with pytest.raises(HiveConnectionError):
             await auth.refresh_token("tok")
 
 

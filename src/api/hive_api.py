@@ -7,6 +7,8 @@ import re
 import requests
 from pyquery import PyQuery
 
+from ..helper.hive_exceptions import HiveConnectionError
+
 _LOGGER = logging.getLogger(__name__)
 
 _NO_RESPONSE = "No response to Hive API request"
@@ -76,6 +78,10 @@ class HiveApi:
                 return requests.post(
                     url=url, headers=self.headers, data=jsc, timeout=self.timeout
                 )
+            if http_method == "DELETE":
+                return requests.delete(
+                    url=url, headers=self.headers, data=jsc, timeout=self.timeout
+                )
             raise ValueError(f"Unsupported request type: {http_method}")
         except Exception as e:
             _LOGGER.error("Request failed: %s", e)
@@ -121,7 +127,12 @@ class HiveApi:
             }
             _LOGGER.debug("get_login_info - Login info extracted successfully")
             return login_data
-        except (OSError, RuntimeError, KeyError) as e:
+        except OSError as e:
+            # requests' timeouts and connection errors are OSError subclasses.
+            _LOGGER.error("Failed to get login info: %s", str(e))
+            self.error()
+            raise HiveConnectionError("Could not reach the Hive login page") from e
+        except (RuntimeError, KeyError) as e:
             _LOGGER.error("Failed to get login info: %s", str(e))
             self.error()
             return None
@@ -186,6 +197,28 @@ class HiveApi:
         jsc = data
         url = self.urls["base"] + self.urls["actions"] + "/" + n_id
         return self._call_endpoint("POST", url, jsc)
+
+    def get_holiday_mode(self):
+        """Get the current holiday mode configuration."""
+        url = self.urls["base"] + self.urls["holiday_mode"]
+        return self._call_endpoint("GET", url)
+
+    def set_holiday_mode(self, start, end, temperature):
+        """Schedule holiday mode.
+
+        Args:
+            start: Start time as epoch milliseconds.
+            end: End time as epoch milliseconds.
+            temperature: Frost-protection temperature to hold during holiday mode.
+        """
+        jsc = json.dumps({"start": start, "end": end, "temperature": temperature})
+        url = self.urls["base"] + self.urls["holiday_mode"]
+        return self._call_endpoint("POST", url, jsc)
+
+    def cancel_holiday_mode(self):
+        """Cancel any scheduled or active holiday mode."""
+        url = self.urls["base"] + self.urls["holiday_mode"]
+        return self._call_endpoint("DELETE", url, json.dumps({}))
 
     def error(self):
         """An error has occurred interacting with the Hive API."""

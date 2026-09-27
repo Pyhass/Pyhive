@@ -16,6 +16,7 @@ from .helper.hive_exceptions import (
     HiveAuthCredentialError,
     HiveAuthError,
     HiveConfigurationError,
+    HiveConnectionError,
     HiveError,
     HiveFailedToRefreshTokens,
     HiveInvalid2FACode,
