@@ -122,6 +122,19 @@ jobs:
             Only fetch what you need; skip this for PRs that don't touch the
             public API.
 
+            Dependency changes (`dependencies` in `pyproject.toml`): Home
+            Assistant installs this library inside its own environment, so judge
+            version ranges against what Home Assistant pins *today*, not against
+            the reasons given in older issues or PRs — those constraints change.
+            Before calling a range right or wrong, fetch:
+            - https://raw.githubusercontent.com/home-assistant/core/dev/homeassistant/package_constraints.txt
+              (hard pins applied to every integration install, e.g. boto3/botocore)
+            - https://raw.githubusercontent.com/home-assistant/core/dev/requirements_all.txt
+              (versions of other integrations' packages, e.g. aiobotocore)
+            A range that can't be satisfied alongside those pins is a bug: Home
+            Assistant fails with `RequirementsNotFound`. Quote the pins you
+            checked.
+
             ## What to look for, in priority order
             1. Bugs (top priority). For every changed function, trace the actual
                values it receives and returns, and check its callers too — a
