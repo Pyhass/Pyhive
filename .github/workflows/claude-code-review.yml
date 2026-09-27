@@ -48,7 +48,12 @@ jobs:
             Use `gh pr view` and `gh pr diff` to inspect the changes. If `gh pr diff`
             fails because the diff is too large, use
             `git diff origin/${{ github.event.pull_request.base.ref }}...HEAD` instead
-            (add `--stat` or a path to narrow it down).
+            (add `--stat` or a path to narrow it down). The full history is already
+            checked out, so `origin/${{ github.event.pull_request.base.ref }}` exists.
+
+            Do the review yourself in this session — do not start sub-agents or
+            background tasks. The run ends as soon as you stop, so nothing posted
+            later would ever arrive.
 
             Post inline comments on specific lines with
             mcp__github_inline_comment__create_inline_comment.
@@ -59,4 +64,5 @@ jobs:
             `gh pr comment ${{ github.event.pull_request.number }} --body-file review.md`
             Do not use heredocs, `$(...)`, or pipes in gh commands. Be concise.
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(grep:*),Bash(cat:*),Read,Write,Glob,Grep"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git diff:*),Bash(git fetch:*),Bash(git log:*),Bash(git show:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(grep:*),Bash(cat:*),Read,Write,Glob,Grep"
+            --disallowedTools "Agent,Task"
