@@ -53,6 +53,12 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The Claude GitHub App token exchange rejects OIDC tokens from
+          # pull_request_target ("Invalid OIDC token"), so fork reviews use the
+          # workflow token instead (comments then come from github-actions[bot]).
+          # Empty for same-repo PRs, which keep using the Claude app.
+          github_token: >-
+            ${{ github.event_name == 'pull_request_target' && secrets.GITHUB_TOKEN || '' }}
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
