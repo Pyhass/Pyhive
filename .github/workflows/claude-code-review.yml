@@ -22,7 +22,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          # Full history so Claude can `git diff` locally when the PR is too
+          # large for the GitHub diff API (>20k lines, e.g. dev -> master).
+          fetch-depth: 0
 
       - name: Run Claude Code Review
         id: claude-review
@@ -40,9 +42,14 @@ jobs:
             - Style: snake_case naming, no unused imports, ruff/pylint compliance
             - Tests: are new features or bug fixes covered by tests?
 
-            Use `gh pr diff` and `gh pr view` to inspect the changes.
+            Use `gh pr view` and `gh pr diff` to inspect the changes. If `gh pr diff`
+            fails because the diff is too large, use
+            `git diff origin/${{ github.event.pull_request.base.ref }}...HEAD` instead
+            (add `--stat` or a path to narrow it down).
+
             Post inline comments on specific lines with
-            mcp__github_inline_comment__create_inline_comment, then post a short
-            overall summary with `gh pr comment`. Be concise.
+            mcp__github_inline_comment__create_inline_comment. Finally, ALWAYS post
+            one overall summary with `gh pr comment ${{ github.event.pull_request.number }} --body "..."`,
+            even if you found no issues or could only review part of the PR. Be concise.
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Read,Glob,Grep"
