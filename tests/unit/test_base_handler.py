@@ -2,9 +2,9 @@
 
 # pylint: disable=protected-access,too-few-public-methods,attribute-defined-outside-init
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from apyhiveapi.helper.device_handler_base import BaseDeviceHandler
 from apyhiveapi.helper.hivedataclasses import Device
 from apyhiveapi.helper.map import Map
@@ -167,11 +167,20 @@ class TestExecuteStateChange:
         assert result is False
         session.get_devices.assert_not_called()
 
-    async def test_malformed_set_state_response_raises_key_error(self):
-        """KeyError propagates when set_state response is missing 'original' key."""
+    async def test_malformed_set_state_response_returns_false(self):
+        """Returns False when set_state response is missing 'original' key."""
         session = _make_session({"prod-1": {"type": "heating"}})
         session.api.set_state = AsyncMock(return_value={"parsed": {}})
         h = _make_handler(session)
         d = _make_device()
-        with pytest.raises(KeyError):
-            await h._execute_state_change(d, mode="MANUAL")
+        assert await h._execute_state_change(d, mode="MANUAL") is False
+        session.get_devices.assert_not_called()
+
+    async def test_set_state_timeout_returns_false(self):
+        """Returns False instead of raising when set_state times out."""
+        session = _make_session({"prod-1": {"type": "heating"}})
+        session.api.set_state = AsyncMock(side_effect=asyncio.TimeoutError)
+        h = _make_handler(session)
+        d = _make_device()
+        assert await h._execute_state_change(d, mode="MANUAL") is False
+        session.get_devices.assert_not_called()
