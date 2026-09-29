@@ -4,9 +4,11 @@
 
 from unittest.mock import AsyncMock
 
+import pytest
 from apyhiveapi.helper.compat_aliases import (
     ActionCompatMixin,
     HeatingCompatMixin,
+    HubCompatMixin,
     LightCompatMixin,
     SensorCompatMixin,
     SessionCompatMixin,
@@ -471,3 +473,76 @@ class TestActionCompatMixin:
         result = await s.setStatusOff(d)
         s.set_status_off.assert_called_once_with(d)
         assert result is True
+
+
+# ---------------------------------------------------------------------------
+# Getter aliases called by Home Assistant core's hive platforms
+# ---------------------------------------------------------------------------
+
+_DEVICE = object()
+
+_GETTER_ALIASES = [
+    (HeatingCompatMixin, "getMinTemperature", "get_min_temperature", (_DEVICE,)),
+    (HeatingCompatMixin, "getMaxTemperature", "get_max_temperature", (_DEVICE,)),
+    (
+        HeatingCompatMixin,
+        "getCurrentTemperature",
+        "get_current_temperature",
+        (_DEVICE,),
+    ),
+    (HeatingCompatMixin, "getTargetTemperature", "get_target_temperature", (_DEVICE,)),
+    (HeatingCompatMixin, "getMode", "get_mode", (_DEVICE,)),
+    (HeatingCompatMixin, "getState", "get_state", (_DEVICE,)),
+    (HeatingCompatMixin, "getCurrentOperation", "get_current_operation", (_DEVICE,)),
+    (HeatingCompatMixin, "getBoostStatus", "get_boost_status", (_DEVICE,)),
+    (HeatingCompatMixin, "getBoostTime", "get_boost_time", (_DEVICE,)),
+    (HeatingCompatMixin, "getHeatOnDemand", "get_heat_on_demand", (_DEVICE,)),
+    (HeatingCompatMixin, "setHeatOnDemand", "set_heat_on_demand", (_DEVICE, "ENABLED")),
+    (HeatingCompatMixin, "getOperationModes", "get_operation_modes", ()),
+    (
+        HeatingCompatMixin,
+        "getScheduleNowNextLater",
+        "get_schedule_now_next_later",
+        (_DEVICE,),
+    ),
+    (HeatingCompatMixin, "minmaxTemperature", "minmax_temperature", (_DEVICE,)),
+    (LightCompatMixin, "getState", "get_state", (_DEVICE,)),
+    (LightCompatMixin, "getBrightness", "get_brightness", (_DEVICE,)),
+    (LightCompatMixin, "getMinColorTemp", "get_min_color_temp", (_DEVICE,)),
+    (LightCompatMixin, "getMaxColorTemp", "get_max_color_temp", (_DEVICE,)),
+    (LightCompatMixin, "getColorTemp", "get_color_temp", (_DEVICE,)),
+    (LightCompatMixin, "getColor", "get_color", (_DEVICE,)),
+    (LightCompatMixin, "getColorMode", "get_color_mode", (_DEVICE,)),
+    (SwitchCompatMixin, "getState", "get_state", (_DEVICE,)),
+    (SwitchCompatMixin, "getPowerUsage", "get_power_usage", (_DEVICE,)),
+    (SwitchCompatMixin, "getSwitchState", "get_switch_state", (_DEVICE,)),
+    (WaterHeaterCompatMixin, "getBoostTime", "get_boost_time", (_DEVICE,)),
+    (WaterHeaterCompatMixin, "getMode", "get_mode", (_DEVICE,)),
+    (WaterHeaterCompatMixin, "getState", "get_state", (_DEVICE,)),
+    (WaterHeaterCompatMixin, "getOperationModes", "get_operation_modes", ()),
+    (
+        WaterHeaterCompatMixin,
+        "getScheduleNowNextLater",
+        "get_schedule_now_next_later",
+        (_DEVICE,),
+    ),
+    (SensorCompatMixin, "getState", "get_state", (_DEVICE,)),
+    (ActionCompatMixin, "getState", "get_state", (_DEVICE,)),
+    (HubCompatMixin, "getSmokeStatus", "get_smoke_status", (_DEVICE,)),
+    (HubCompatMixin, "getDogBarkStatus", "get_dog_bark_status", (_DEVICE,)),
+    (HubCompatMixin, "getGlassBreakStatus", "get_glass_break_status", (_DEVICE,)),
+]
+
+
+@pytest.mark.parametrize(
+    ("mixin", "alias", "target", "args"),
+    _GETTER_ALIASES,
+    ids=[f"{m.__name__}.{a}" for m, a, _, _ in _GETTER_ALIASES],
+)
+async def test_getter_alias_delegates(mixin, alias, target, args):
+    """Each camelCase alias delegates to its snake_case method and returns its result."""
+    sentinel = object()
+    stub = type("Stub", (mixin,), {target: AsyncMock(return_value=sentinel)})()
+    result = await getattr(stub, alias)(*args)
+    getattr(stub, target).assert_called_once_with(*args)
+    assert result is sentinel
