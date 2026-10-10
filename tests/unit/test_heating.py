@@ -493,3 +493,28 @@ class TestHeatingGetClimateCacheMiss:
         result = await climate.get_climate(_make_device())
         assert result is not None
         climate.session.attr.online_offline.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# get_mode — state block present but mode missing (incomplete API response)
+# ---------------------------------------------------------------------------
+
+
+class TestGetModeMissingMode:
+    """get_mode must not log an error per call when state has no mode."""
+
+    async def test_missing_mode_returns_none_without_error_log(self):
+        """state without 'mode' returns None and logs nothing at ERROR."""
+        climate = _make_climate({"heat-1": {"state": {"target": 7}}})
+        with patch("apyhiveapi.devices.heating._LOGGER") as mock_log:
+            result = await climate.get_mode(_make_device())
+        assert result is None
+        mock_log.error.assert_not_called()
+
+    async def test_schedule_lookup_with_missing_mode_returns_none(self):
+        """get_schedule_now_next_later returns None quietly when mode is missing."""
+        climate = _make_climate({"heat-1": {"state": {"schedule": {}}}})
+        with patch("apyhiveapi.devices.heating._LOGGER") as mock_log:
+            result = await climate.get_schedule_now_next_later(_make_device())
+        assert result is None
+        mock_log.error.assert_not_called()

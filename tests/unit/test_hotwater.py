@@ -326,3 +326,17 @@ class TestHotwaterGetWaterHeaterCacheMiss:
         result = await hw.get_water_heater(_make_device())
         assert result is not None
         hw.session.attr.online_offline.assert_called_once()
+
+
+class TestHotwaterGetModeMissingMode:
+    """get_mode must not log an error per call when state has no mode."""
+
+    async def test_missing_mode_returns_none_without_error_log(self):
+        """state without 'mode' returns None and logs nothing at ERROR."""
+        from unittest.mock import patch
+
+        hw = _make_hotwater({"hw-1": {"state": {"status": "OFF"}}})
+        with patch("apyhiveapi.devices.hotwater._LOGGER") as mock_log:
+            result = await hw.get_mode(_make_device())
+        assert result is None
+        mock_log.error.assert_not_called()

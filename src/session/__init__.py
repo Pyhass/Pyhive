@@ -72,6 +72,7 @@ class HiveSession(SessionCompatMixin, SessionAuthMixin, PollingMixin, DiscoveryM
         self.hub_id = None
         self._last_poll_slow = False
         self._slow_poll_threshold = 3
+        self._stale_state_polls: dict[str, int] = {}
         self._refresh_threshold = 0.90
         self._update_task: asyncio.Task | None = None
 
