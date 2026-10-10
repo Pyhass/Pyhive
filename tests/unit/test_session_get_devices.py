@@ -572,3 +572,40 @@ class TestGetDevicesIncompleteState:
         await p.get_devices("No_ID")
         assert p._stale_state_polls == {"heat-1": 1}
         assert p.data.products["heat-1"]["state"] == {"mode": "MANUAL"}
+
+    async def test_optional_key_dropped_by_hive_is_not_carried_over(self):
+        """Keys Hive may legitimately omit (e.g. boost) are never kept stale."""
+        p = self._stub({"mode": "MANUAL", "target": 20, "boost": 30, "hue": 10})
+        p.api.get_all = AsyncMock(
+            return_value=_products_response(
+                {"id": "heat-1", "state": {"mode": "MANUAL", "target": 20}}
+            )
+        )
+        with patch("apyhiveapi.session.polling._LOGGER") as mock_log:
+            await p.get_devices("No_ID")
+        assert p.data.products["heat-1"]["state"] == {"mode": "MANUAL", "target": 20}
+        mock_log.warning.assert_not_called()
+        assert not p._stale_state_polls
+
+    async def test_only_required_keys_are_carried_over(self):
+        """A truncated state keeps required keys but not optional ones."""
+        p = self._stub({"mode": "MANUAL", "target": 20, "boost": 30})
+        p.api.get_all = AsyncMock(
+            return_value=_products_response({"id": "heat-1", "state": {}})
+        )
+        await p.get_devices("No_ID")
+        assert p.data.products["heat-1"]["state"] == {"mode": "MANUAL", "target": 20}
+
+    async def test_count_is_dropped_for_products_no_longer_returned(self):
+        """A product that leaves the response does not leave a count behind."""
+        p = self._stub({"mode": "OFF"})
+        p.api.get_all = AsyncMock(
+            side_effect=[
+                _products_response({"id": "heat-1", "state": {}}),
+                _products_response({"id": "heat-2", "state": {"mode": "OFF"}}),
+            ]
+        )
+        await p.get_devices("No_ID")
+        assert p._stale_state_polls == {"heat-1": 1}
+        await p.get_devices("No_ID")
+        assert not p._stale_state_polls

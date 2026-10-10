@@ -19,6 +19,11 @@ _LOGGER = logging.getLogger(__name__)
 # over from the previous poll before the response is accepted as it is.
 MAX_STALE_STATE_POLLS = 5
 
+# State keys Hive always sends for a product that has them. Only these are
+# carried over: other keys (``boost``, the colour keys) are legitimately
+# omitted at times, so keeping their old value would report stale state.
+REQUIRED_STATE_KEYS = frozenset({"mode", "name", "status", "target"})
+
 
 class PollingMixin:
     """Device polling, rate-limiting, and entity-cache methods.
@@ -77,11 +82,12 @@ class PollingMixin:
         return False
 
     def _keep_missing_state(self, new_products: dict) -> None:
-        """Carry over state keys that a poll response has dropped.
+        """Carry over required state keys that a poll response has dropped.
 
         Hive sometimes answers a poll with products whose ``state`` block is
-        missing keys it normally has. Keep the last known value for those
-        keys, for up to ``MAX_STALE_STATE_POLLS`` consecutive polls.
+        missing keys it normally has. Keep the last known value for the keys
+        in ``REQUIRED_STATE_KEYS``, for up to ``MAX_STALE_STATE_POLLS``
+        consecutive polls.
 
         Args:
             new_products (dict): Products from the latest response, keyed by ID.
@@ -95,7 +101,9 @@ class PollingMixin:
                 new_state = {}
             missing: list[str] = []
             if isinstance(previous_state, dict):
-                missing = sorted(previous_state.keys() - new_state.keys())
+                missing = sorted(
+                    (previous_state.keys() & REQUIRED_STATE_KEYS) - new_state.keys()
+                )
             if not isinstance(previous_state, dict) or not missing:
                 self._stale_state_polls.pop(product_id, None)
                 continue
@@ -120,10 +128,15 @@ class PollingMixin:
                     MAX_STALE_STATE_POLLS,
                 )
                 continue
-            product["state"] = {**previous_state, **new_state}
+            product["state"] = {
+                **{key: previous_state[key] for key in missing},
+                **new_state,
+            }
             incomplete.append(
                 f"{name} ({product_type} {product_id}) missing {', '.join(missing)}"
             )
+        for product_id in self._stale_state_polls.keys() - new_products.keys():
+            del self._stale_state_polls[product_id]
         if incomplete:
             _LOGGER.warning(
                 "Hive API returned incomplete state — keeping the last known "
