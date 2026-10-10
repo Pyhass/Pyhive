@@ -15,14 +15,24 @@ from ..helper.hivedataclasses import Device
 
 _LOGGER = logging.getLogger(__name__)
 
+# Consecutive polls for which state keys missing from a response are carried
+# over from the previous poll before the response is accepted as it is.
+MAX_STALE_STATE_POLLS = 5
+
+# State keys Hive always sends for a product that has them. Only these are
+# carried over: other keys (``boost``, the colour keys) are legitimately
+# omitted at times, so keeping their old value would report stale state.
+REQUIRED_STATE_KEYS = frozenset({"mode", "name", "status", "target"})
+
 
 class PollingMixin:
     """Device polling, rate-limiting, and entity-cache methods.
 
     Expects ``self.config``, ``self.tokens``, ``self.api``,
     ``self.update_lock``, ``self._update_task``,
-    ``self._last_poll_slow``, and ``self._slow_poll_threshold``
-    to be set up by the owning class's ``__init__``.
+    ``self._last_poll_slow``, ``self._slow_poll_threshold``, and
+    ``self._stale_state_polls`` to be set up by the owning class's
+    ``__init__``.
     """
 
     # Attributes provided by HiveSession.__init__
@@ -35,6 +45,7 @@ class PollingMixin:
     _update_task: asyncio.Task | None
     _last_poll_slow: bool
     _slow_poll_threshold: int
+    _stale_state_polls: dict[str, int]
 
     @staticmethod
     def _entity_cache_key(device) -> str:
@@ -69,6 +80,69 @@ class PollingMixin:
             current_task = asyncio.current_task()
             return self._update_task is None or current_task is not self._update_task
         return False
+
+    def _keep_missing_state(self, new_products: dict) -> None:
+        """Carry over required state keys that a poll response has dropped.
+
+        Hive sometimes answers a poll with products whose ``state`` block is
+        missing keys it normally has. Keep the last known value for the keys
+        in ``REQUIRED_STATE_KEYS``, for up to ``MAX_STALE_STATE_POLLS``
+        consecutive polls.
+
+        Args:
+            new_products (dict): Products from the latest response, keyed by ID.
+        """
+        incomplete = []
+        for product_id, product in new_products.items():
+            previous = self.data.products.get(product_id) or {}
+            previous_state = previous.get("state")
+            new_state = product.get("state")
+            if not isinstance(new_state, dict):
+                new_state = {}
+            missing: list[str] = []
+            if isinstance(previous_state, dict):
+                missing = sorted(
+                    (previous_state.keys() & REQUIRED_STATE_KEYS) - new_state.keys()
+                )
+            if not isinstance(previous_state, dict) or not missing:
+                self._stale_state_polls.pop(product_id, None)
+                continue
+            name = previous_state.get("name", product_id)
+            product_type = product.get("type")
+            _LOGGER.debug(
+                "Hive API state for %s %s arrived with keys: %s",
+                product_type,
+                product_id,
+                ", ".join(sorted(new_state)),
+            )
+            polls = self._stale_state_polls.get(product_id, 0) + 1
+            self._stale_state_polls[product_id] = polls
+            if polls > MAX_STALE_STATE_POLLS:
+                _LOGGER.warning(
+                    "Hive API state for %s (%s %s) is still missing %s after %d "
+                    "polls — no longer keeping the last known values.",
+                    name,
+                    product_type,
+                    product_id,
+                    ", ".join(missing),
+                    MAX_STALE_STATE_POLLS,
+                )
+                continue
+            product["state"] = {
+                **{key: previous_state[key] for key in missing},
+                **new_state,
+            }
+            incomplete.append(
+                f"{name} ({product_type} {product_id}) missing {', '.join(missing)}"
+            )
+        for product_id in self._stale_state_polls.keys() - new_products.keys():
+            del self._stale_state_polls[product_id]
+        if incomplete:
+            _LOGGER.warning(
+                "Hive API returned incomplete state — keeping the last known "
+                "values: %s",
+                "; ".join(sorted(incomplete)),
+            )
 
     async def _poll_devices(self) -> bool:
         """Fetch latest device state from the Hive API."""
@@ -205,6 +279,7 @@ class PollingMixin:
                 len(tmp_actions),
             )
             if tmp_products:
+                self._keep_missing_state(tmp_products)
                 self.data.products = tmp_products
             if tmp_devices:
                 self.data.devices = tmp_devices

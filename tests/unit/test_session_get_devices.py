@@ -35,6 +35,7 @@ def _make_stub():
     p._update_task = None
     p._last_poll_slow = False
     p._slow_poll_threshold = 3
+    p._stale_state_polls = {}
 
     # External dependencies (provided by HiveSession in real code)
     p.api = MagicMock()
@@ -423,3 +424,188 @@ class TestUpdateDataExtended:
         # finally block left _update_task alone because it no longer matched
         # current_task (the False branch — line 113->116)
         assert p._update_task is sentinel
+
+
+# ---------------------------------------------------------------------------
+# get_devices — incomplete product state in an otherwise successful response
+# ---------------------------------------------------------------------------
+
+
+def _products_response(*products):
+    return {"original": 200, "parsed": {"products": list(products)}}
+
+
+class TestGetDevicesIncompleteState:
+    """A poll that drops state keys must not wipe the last known values."""
+
+    def _stub(self, state):
+        p = _make_stub()
+        p.tokens = MagicMock()
+        p.data.products = {"heat-1": {"id": "heat-1", "state": dict(state)}}
+        return p
+
+    async def test_missing_state_key_keeps_previous_value(self):
+        """state.mode absent from the response keeps the previous mode."""
+        p = self._stub({"name": "Hallway", "mode": "OFF", "target": 7})
+        p.api.get_all = AsyncMock(
+            return_value=_products_response(
+                {
+                    "id": "heat-1",
+                    "type": "heating",
+                    "state": {"name": "Hallway", "target": 20},
+                }
+            )
+        )
+        with patch("apyhiveapi.session.polling._LOGGER") as mock_log:
+            assert await p.get_devices("No_ID") is True
+        assert p.data.products["heat-1"]["state"] == {
+            "name": "Hallway",
+            "mode": "OFF",
+            "target": 20,
+        }
+        mock_log.warning.assert_called_once()
+        assert mock_log.warning.call_args.args[1] == (
+            "Hallway (heating heat-1) missing mode"
+        )
+
+    async def test_warning_lists_every_product_and_missing_key(self):
+        """One warning per poll names each product and its missing keys."""
+        p = self._stub({"mode": "OFF", "target": 7, "boost": None})
+        p.data.products["hw-1"] = {"id": "hw-1", "state": {"mode": "OFF"}}
+        p.api.get_all = AsyncMock(
+            return_value=_products_response(
+                {"id": "heat-1", "type": "heating", "state": {"boost": None}},
+                {"id": "hw-1", "type": "hotwater"},
+            )
+        )
+        with patch("apyhiveapi.session.polling._LOGGER") as mock_log:
+            await p.get_devices("No_ID")
+        mock_log.warning.assert_called_once()
+        assert mock_log.warning.call_args.args[1] == (
+            "heat-1 (heating heat-1) missing mode, target; "
+            "hw-1 (hotwater hw-1) missing mode"
+        )
+
+    async def test_debug_logs_the_state_keys_that_arrived(self):
+        """Debug shows the keys received for an incomplete product, not values."""
+        p = self._stub({"mode": "OFF", "target": 7, "boost": None})
+        p.api.get_all = AsyncMock(
+            return_value=_products_response(
+                {"id": "heat-1", "type": "heating", "state": {"target": 20, "boost": 5}}
+            )
+        )
+        with patch("apyhiveapi.session.polling._LOGGER") as mock_log:
+            await p.get_devices("No_ID")
+        shape_calls = [
+            c.args for c in mock_log.debug.call_args_list if "arrived" in c.args[0]
+        ]
+        assert len(shape_calls) == 1
+        assert shape_calls[0][1:] == ("heating", "heat-1", "boost, target")
+
+    async def test_missing_state_block_keeps_previous_state(self):
+        """A product with no state block at all keeps the previous state."""
+        p = self._stub({"mode": "OFF", "target": 7})
+        p.api.get_all = AsyncMock(return_value=_products_response({"id": "heat-1"}))
+        await p.get_devices("No_ID")
+        assert p.data.products["heat-1"]["state"] == {"mode": "OFF", "target": 7}
+
+    async def test_null_value_is_not_treated_as_missing(self):
+        """A key present with a None value replaces the previous value."""
+        p = self._stub({"mode": "OFF", "boost": 30})
+        p.api.get_all = AsyncMock(
+            return_value=_products_response(
+                {"id": "heat-1", "state": {"mode": "OFF", "boost": None}}
+            )
+        )
+        with patch("apyhiveapi.session.polling._LOGGER") as mock_log:
+            await p.get_devices("No_ID")
+        assert p.data.products["heat-1"]["state"] == {"mode": "OFF", "boost": None}
+        mock_log.warning.assert_not_called()
+
+    async def test_new_product_is_accepted_as_is(self):
+        """A product with no previous record is stored unchanged."""
+        p = self._stub({"mode": "OFF"})
+        p.api.get_all = AsyncMock(
+            return_value=_products_response(
+                {"id": "heat-1", "state": {"mode": "OFF"}},
+                {"id": "heat-2", "state": {"target": 7}},
+            )
+        )
+        await p.get_devices("No_ID")
+        assert p.data.products["heat-2"]["state"] == {"target": 7}
+
+    async def test_gives_up_after_max_consecutive_incomplete_polls(self):
+        """A key that stays missing is eventually dropped, not kept forever."""
+        from apyhiveapi.session.polling import MAX_STALE_STATE_POLLS
+
+        p = self._stub({"mode": "OFF", "target": 7})
+        p.api.get_all = AsyncMock(
+            side_effect=lambda: _products_response(
+                {"id": "heat-1", "state": {"target": 7}}
+            )
+        )
+        for _ in range(MAX_STALE_STATE_POLLS):
+            await p.get_devices("No_ID")
+            assert p.data.products["heat-1"]["state"]["mode"] == "OFF"
+        await p.get_devices("No_ID")
+        assert p.data.products["heat-1"]["state"] == {"target": 7}
+        # The shorter state is now the baseline, so the next poll is complete.
+        with patch("apyhiveapi.session.polling._LOGGER") as mock_log:
+            await p.get_devices("No_ID")
+        mock_log.warning.assert_not_called()
+        assert not p._stale_state_polls
+
+    async def test_complete_response_resets_the_count(self):
+        """A complete response between incomplete ones restarts the count."""
+        p = self._stub({"mode": "OFF"})
+        p.api.get_all = AsyncMock(
+            side_effect=[
+                _products_response({"id": "heat-1", "state": {}}),
+                _products_response({"id": "heat-1", "state": {"mode": "MANUAL"}}),
+                _products_response({"id": "heat-1", "state": {}}),
+            ]
+        )
+        await p.get_devices("No_ID")
+        assert p._stale_state_polls == {"heat-1": 1}
+        await p.get_devices("No_ID")
+        assert not p._stale_state_polls
+        await p.get_devices("No_ID")
+        assert p._stale_state_polls == {"heat-1": 1}
+        assert p.data.products["heat-1"]["state"] == {"mode": "MANUAL"}
+
+    async def test_optional_key_dropped_by_hive_is_not_carried_over(self):
+        """Keys Hive may legitimately omit (e.g. boost) are never kept stale."""
+        p = self._stub({"mode": "MANUAL", "target": 20, "boost": 30, "hue": 10})
+        p.api.get_all = AsyncMock(
+            return_value=_products_response(
+                {"id": "heat-1", "state": {"mode": "MANUAL", "target": 20}}
+            )
+        )
+        with patch("apyhiveapi.session.polling._LOGGER") as mock_log:
+            await p.get_devices("No_ID")
+        assert p.data.products["heat-1"]["state"] == {"mode": "MANUAL", "target": 20}
+        mock_log.warning.assert_not_called()
+        assert not p._stale_state_polls
+
+    async def test_only_required_keys_are_carried_over(self):
+        """A truncated state keeps required keys but not optional ones."""
+        p = self._stub({"mode": "MANUAL", "target": 20, "boost": 30})
+        p.api.get_all = AsyncMock(
+            return_value=_products_response({"id": "heat-1", "state": {}})
+        )
+        await p.get_devices("No_ID")
+        assert p.data.products["heat-1"]["state"] == {"mode": "MANUAL", "target": 20}
+
+    async def test_count_is_dropped_for_products_no_longer_returned(self):
+        """A product that leaves the response does not leave a count behind."""
+        p = self._stub({"mode": "OFF"})
+        p.api.get_all = AsyncMock(
+            side_effect=[
+                _products_response({"id": "heat-1", "state": {}}),
+                _products_response({"id": "heat-2", "state": {"mode": "OFF"}}),
+            ]
+        )
+        await p.get_devices("No_ID")
+        assert p._stale_state_polls == {"heat-1": 1}
+        await p.get_devices("No_ID")
+        assert not p._stale_state_polls

@@ -31,20 +31,13 @@ class HiveHotwater(BoostMixin, BaseDeviceHandler):
         Returns:
             str: Return mode.
         """
-        state = None
-        final = None
-        device_name = device.ha_name
-
-        try:
-            data = self.session.data.products[device.hive_id]
-            state = data["state"]["mode"]
-            if state == "BOOST":
-                state = self._get_product_state(device, "props", "previous", "mode")
-            final = HIVETOHA[self.hotwater_type].get(state, state)
-        except KeyError as e:
-            _LOGGER.error("get_mode - KeyError getting mode for %s: %s", device_name, e)
-
-        return final
+        state = self._get_product_state(device, "state", "mode")
+        if state is None:
+            _LOGGER.debug("get_mode - No mode in state for %s.", device.ha_name)
+            return None
+        if state == "BOOST":
+            state = self._get_product_state(device, "props", "previous", "mode")
+        return HIVETOHA[self.hotwater_type].get(state, state)
 
     @staticmethod
     async def get_operation_modes():
