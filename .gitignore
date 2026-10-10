@@ -54,3 +54,6 @@ superpowers/
 coverage.lcov
 lcov.info
 htmlcov/
+
+# Local session runner logs (scripts/run_session.py)
+logs/
