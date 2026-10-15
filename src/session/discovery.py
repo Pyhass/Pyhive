@@ -182,7 +182,7 @@ class DiscoveryMixin:
         )
         self._configure_file_mode(config.get("username", self.config.username))
 
-        scan_interval = config.get("options", {}).get("scan_interval")
+        scan_interval = (config.get("options") or {}).get("scan_interval")
         if scan_interval is not None:
             await self.update_interval(scan_interval)  # type: ignore[attr-defined]
 

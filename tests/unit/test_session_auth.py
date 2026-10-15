@@ -268,11 +268,19 @@ class TestRetryLogin:
             await s._retry_login()
         assert s.auth.login.call_count == 3
 
-    async def test_non_api_error_propagates_without_retry(self):
-        """Errors that are not HiveApiError propagate unchanged on the first attempt."""
+    async def test_invalid_device_auth_converted_to_reauth_without_retry(self):
+        """Rejected device credentials need a new SMS login, so reauth at once."""
         s = _make_stub()
         s.auth.login.side_effect = HiveInvalidDeviceAuthentication()
-        with pytest.raises(HiveInvalidDeviceAuthentication):
+        with pytest.raises(HiveReauthRequired):
+            await s._retry_login()
+        assert s.auth.login.call_count == 1
+
+    async def test_unexpected_error_propagates_without_retry(self):
+        """Errors outside the Hive API (e.g. a library bug) propagate unchanged."""
+        s = _make_stub()
+        s.auth.login.side_effect = KeyError("ChallengeName")
+        with pytest.raises(KeyError):
             await s._retry_login()
         assert s.auth.login.call_count == 1
 

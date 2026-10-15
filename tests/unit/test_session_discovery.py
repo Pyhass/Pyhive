@@ -207,6 +207,14 @@ class TestStartSessionExtended:
         await s.start_session({"tokens": {}, "options": {"scan_interval": 300}})
         s.update_interval.assert_called_once_with(300)
 
+    async def test_options_none_keeps_default(self):
+        """An explicit options=None is treated as no options."""
+        s = _make_stub()
+        s.config.file = False
+        s.update_interval = AsyncMock()
+        await s.start_session({"tokens": {}, "options": None})
+        s.update_interval.assert_not_called()
+
     async def test_no_scan_interval_option_keeps_default(self):
         """Without options.scan_interval the default interval is left alone."""
         s = _make_stub()

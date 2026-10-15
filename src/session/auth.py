@@ -11,6 +11,7 @@ from ..helper.hive_exceptions import (
     HiveApiError,
     HiveFailedToRefreshTokens,
     HiveInvalid2FACode,
+    HiveInvalidDeviceAuthentication,
     HiveInvalidPassword,
     HiveInvalidUsername,
     HiveReauthRequired,
@@ -274,7 +275,8 @@ class SessionAuthMixin:
 
         Raises:
             HiveReauthRequired: User interaction required (SMS 2FA challenge),
-                                 credentials invalid, or all retries exhausted.
+                                 credentials or saved device credentials
+                                 rejected, or all retries exhausted.
             Exception: Any error that is not a ``HiveApiError`` propagates
                        unchanged without retrying.
         """
@@ -296,10 +298,15 @@ class SessionAuthMixin:
                     HiveReauthRequired,
                     HiveInvalidUsername,
                     HiveInvalidPassword,
+                    HiveInvalidDeviceAuthentication,
                 ),
                 retry_on=(HiveApiError,),
             )
-        except (HiveInvalidUsername, HiveInvalidPassword) as exc:
+        except (
+            HiveInvalidUsername,
+            HiveInvalidPassword,
+            HiveInvalidDeviceAuthentication,
+        ) as exc:
             _LOGGER.error(
                 "_retry_login - Login failed with invalid credentials,"
                 " reauthentication required."
