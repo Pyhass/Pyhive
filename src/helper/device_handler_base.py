@@ -1,5 +1,6 @@
 """Shared base class for all Hive device handlers."""
 
+import asyncio
 import logging
 from typing import Any
 
@@ -39,16 +40,24 @@ class BaseDeviceHandler:  # pylint: disable=too-few-public-methods
             return False
         await self.session.hive_refresh_tokens()
         data = self.session.data.products[device.hive_id]
-        resp = await self.session.api.set_state(
-            data["type"], device.hive_id, **state_kwargs
-        )
-        if resp["original"] == HTTP_OK:
+        try:
+            resp = await self.session.api.set_state(
+                data["type"], device.hive_id, **state_kwargs
+            )
+        except asyncio.TimeoutError:
+            # Honour the documented False-on-failure contract so one slow
+            # device doesn't abort a multi-entity service call.
+            _LOGGER.warning(
+                "_execute_state_change - set_state timed out for %s", device.ha_name
+            )
+            return False
+        if resp.get("original") == HTTP_OK:
             await self.session.get_devices(device.hive_id)
             return True
         _LOGGER.error(
             "_execute_state_change - set_state failed for %s: HTTP %s",
             device.ha_name,
-            resp["original"],
+            resp.get("original"),
         )
         return False
 
