@@ -71,15 +71,15 @@ class HiveAuth:
     SMS_MFA_CHALLENGE = "SMS_MFA"
     DEVICE_VERIFIER_CHALLENGE = "DEVICE_SRP_AUTH"
 
-    def __init__(  # pylint: disable=too-many-positional-arguments
+    def __init__(  # pylint: disable=too-many-positional-arguments  # noqa: PLR0913
         self,
         username: str,
         password: str,
-        device_group_key: str = None,
-        device_key: str = None,
-        device_password: str = None,
-        pool_region: str = None,
-        client_secret: str = None,
+        device_group_key: str | None = None,
+        device_key: str | None = None,
+        device_password: str | None = None,
+        pool_region: str | None = None,
+        client_secret: str | None = None,
     ):
         """Initialise Sync Hive Auth.
 
@@ -114,13 +114,13 @@ class HiveAuth:
         self.use_file = bool(self.username == "use@file.com")
         self.file_response = {"AuthenticationResult": {"AccessToken": "file"}}
         self.api = HiveApi()
-        self.data = self.api.getLoginInfo()
-        self.__pool_id = self.data.get("UPID")
-        self.__client_id = self.data.get("CLIID")
-        self.__region = self.data.get("REGION").split("_")[0]
+        self.data = self.api.get_login_info()
+        self._pool_id = self.data.get("UPID")
+        self._client_id = self.data.get("CLIID")
+        self._region = self.data.get("REGION").split("_")[0]
         self.client = boto3.client(
             "cognito-idp",
-            self.__region,
+            self._region,
             aws_access_key_id="ACCESS_KEY",
             aws_secret_access_key="SECRET_KEY",
             aws_session_token="SESSION_TOKEN",
@@ -151,7 +151,7 @@ class HiveAuth:
         return big_a
 
     def get_password_authentication_key(
-        self, username: str, password: str, server_b_value: int, salt: int
+        self, username: str, password: str, server_b_value: str, salt: str
     ):
         """
         Calculates the final hkdf based on computed S value, and computed U value and the key.
@@ -162,17 +162,17 @@ class HiveAuth:
         :param {Long integer} salt Generated salt.
         :return {Buffer} Computed HKDF value.
         """
-        server_b_value = hex_to_long(server_b_value)
-        u_value = calculate_u(self.large_a_value, server_b_value)
+        server_b_long = hex_to_long(server_b_value)
+        u_value = calculate_u(self.large_a_value, server_b_long)
         if u_value == 0:
             raise ValueError("U cannot be zero.")
-        pool_id = self.__pool_id.split("_")[1]
+        pool_id = self._pool_id.split("_")[1]  # type: ignore[union-attr]
         username_password = f"{pool_id}{username}:{password}"
         username_password_hash = hash_sha256(username_password.encode("utf-8"))
 
-        x_value = hex_to_long(hex_hash(pad_hex(salt) + username_password_hash))
+        x_value = hex_to_long(hex_hash(pad_hex(int(salt, 16)) + username_password_hash))
         g_mod_pow_xn = pow(self.g_value, x_value, self.big_n)
-        int_value2 = server_b_value - self.k * g_mod_pow_xn
+        int_value2 = server_b_long - self.k * g_mod_pow_xn
         s_value = pow(int_value2, self.small_a_value + u_value * x_value, self.big_n)
         hkdf = compute_hkdf(
             bytearray.fromhex(pad_hex(s_value)),
@@ -190,7 +190,7 @@ class HiveAuth:
             auth_params.update(
                 {
                     "SECRET_HASH": self.get_secret_hash(
-                        self.username, self.__client_id, self.client_secret
+                        self.username, self._client_id, self.client_secret
                     )
                 }
             )
@@ -258,7 +258,9 @@ class HiveAuth:
         timestamp = re.sub(
             r" 0(\d) ",
             r" \1 ",
-            datetime.datetime.utcnow().strftime("%a %b %d %H:%M:%S UTC %Y"),
+            datetime.datetime.now(datetime.timezone.utc).strftime(
+                "%a %b %d %H:%M:%S UTC %Y"
+            ),
         )
         hkdf = self.get_device_authentication_key(
             self.device_group_key,
@@ -287,7 +289,7 @@ class HiveAuth:
             response.update(
                 {
                     "SECRET_HASH": self.get_secret_hash(
-                        username, self.__client_id, self.client_secret
+                        username, self._client_id, self.client_secret
                     )
                 }
             )
@@ -303,14 +305,16 @@ class HiveAuth:
         timestamp = re.sub(
             r" 0(\d) ",
             r" \1 ",
-            datetime.datetime.utcnow().strftime("%a %b %d %H:%M:%S UTC %Y"),
+            datetime.datetime.now(datetime.timezone.utc).strftime(
+                "%a %b %d %H:%M:%S UTC %Y"
+            ),
         )
         hkdf = self.get_password_authentication_key(
             self.user_id, self.password, srp_b_hex, salt_hex
         )
         secret_block_bytes = base64.standard_b64decode(secret_block_b64)
         msg = (
-            bytearray(self.__pool_id.split("_")[1], "utf-8")
+            bytearray(self._pool_id.split("_")[1], "utf-8")
             + bytearray(self.user_id, "utf-8")
             + bytearray(secret_block_bytes)
             + bytearray(timestamp, "utf-8")
@@ -327,14 +331,14 @@ class HiveAuth:
             response.update(
                 {
                     "SECRET_HASH": self.get_secret_hash(
-                        self.username, self.__client_id, self.client_secret
+                        self.username, self._client_id, self.client_secret
                     )
                 }
             )
 
         return response
 
-    def login(self):
+    def login(self):  # noqa: PLR0912
         """Login into a Hive account."""
         if self.use_file:
             return self.file_response
@@ -348,7 +352,7 @@ class HiveAuth:
             response = self.client.initiate_auth(
                 AuthFlow="USER_SRP_AUTH",
                 AuthParameters=auth_params,
-                ClientId=self.__client_id,
+                ClientId=self._client_id,
             )
         except botocore.exceptions.ClientError as err:
             if err.__class__.__name__ == "UserNotFoundException":
@@ -364,7 +368,7 @@ class HiveAuth:
 
             try:
                 result = self.client.respond_to_auth_challenge(
-                    ClientId=self.__client_id,
+                    ClientId=self._client_id,
                     ChallengeName=self.PASSWORD_VERIFIER_CHALLENGE,
                     ChallengeResponses=challenge_response,
                 )
@@ -396,7 +400,7 @@ class HiveAuth:
         if login_result.get("ChallengeName") == self.DEVICE_VERIFIER_CHALLENGE:
             try:
                 initial_result = self.client.respond_to_auth_challenge(
-                    ClientId=self.__client_id,
+                    ClientId=self._client_id,
                     ChallengeName=self.DEVICE_VERIFIER_CHALLENGE,
                     ChallengeResponses=auth_params,
                 )
@@ -405,7 +409,7 @@ class HiveAuth:
                     initial_result["ChallengeParameters"]
                 )
                 result = self.client.respond_to_auth_challenge(
-                    ClientId=self.__client_id,
+                    ClientId=self._client_id,
                     ChallengeName="DEVICE_PASSWORD_VERIFIER",
                     ChallengeResponses=device_challenge_response,
                 )
@@ -428,7 +432,7 @@ class HiveAuth:
         result = None
         try:
             result = self.client.respond_to_auth_challenge(
-                ClientId=self.__client_id,
+                ClientId=self._client_id,
                 ChallengeName=self.SMS_MFA_CHALLENGE,
                 Session=session,
                 ChallengeResponses={
@@ -456,14 +460,14 @@ class HiveAuth:
 
         return result
 
-    def device_registration(self, device_name: str = None):
+    def device_registration(self, device_name: str | None = None):
         """Register Device."""
         self.confirm_device(device_name)
         self.update_device_status()
 
     def confirm_device(
         self,
-        device_name: str = None,
+        device_name: str | None = None,
     ):
         """Confirm Device Hive."""
         result = None
@@ -515,12 +519,12 @@ class HiveAuth:
     ):
         """Refresh Hive Tokens."""
         result = None
-        auth_params = ({"REFRESH_TOKEN": token},)
+        auth_params: dict[str, str] = {"REFRESH_TOKEN": token}
         if self.device_key is not None:
             auth_params = {"REFRESH_TOKEN": token, "DEVICE_KEY": self.device_key}
         try:
             result = self.client.initiate_auth(
-                ClientId=self.__client_id,
+                ClientId=self._client_id,
                 AuthFlow="REFRESH_TOKEN_AUTH",
                 AuthParameters=auth_params,
             )
@@ -550,15 +554,15 @@ class HiveAuth:
         return result
 
 
-def hex_to_long(hex_string: str):
+def hex_to_long(hex_string: str) -> int:
     """Convert hex to long."""
     return int(hex_string, 16)
 
 
-def get_random(nbytes):
+def get_random(nbytes: int) -> int:
     """Get random bytes."""
     random_hex = binascii.hexlify(os.urandom(nbytes))
-    return hex_to_long(random_hex)
+    return hex_to_long(random_hex.decode())
 
 
 def hash_sha256(buf):
@@ -586,7 +590,7 @@ def calculate_u(big_a, big_b):
 
 def long_to_hex(long_num):
     """Convert long number to hex."""
-    return "%x" % long_num  # pylint: disable=consider-using-f-string
+    return f"{long_num:x}"
 
 
 def pad_hex(long_int):
@@ -601,9 +605,9 @@ def pad_hex(long_int):
     else:
         hash_str = long_int
     if len(hash_str) % 2 == 1:
-        hash_str = "0%s" % hash_str  # pylint: disable=consider-using-f-string
+        hash_str = f"0{hash_str}"
     elif hash_str[0] in "89ABCDEFabcdef":
-        hash_str = "00%s" % hash_str  # pylint: disable=consider-using-f-string
+        hash_str = f"00{hash_str}"
     return hash_str
 
 

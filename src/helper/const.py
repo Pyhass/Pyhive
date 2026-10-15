@@ -1,6 +1,9 @@
 """Constants for Pyhiveapi."""
 
-# pylint: skip-file
+from typing import Any
+
+from .hivedataclasses import EntityConfig
+
 SYNC_PACKAGE_NAME = "pyhiveapi"
 SYNC_PACKAGE_DIR = "/pyhiveapi/"
 ASYNC_PACKAGE_NAME = "apyhiveapi"
@@ -24,9 +27,10 @@ HTTP_INTERNAL_SERVER_ERROR = 500
 HTTP_BAD_GATEWAY = 502
 HTTP_SERVICE_UNAVAILABLE = 503
 
+EXPECTED_DEVICE_DATA_LENGTH = 3
 
-HIVETOHA = {
-    "Alarm": {"home": "armed_home", "away": "armed_away", "asleep": "armed_night"},
+
+HIVETOHA: dict[str, Any] = {
     "Attribute": {True: "Online", False: "Offline"},
     "Boost": {None: "OFF", False: "OFF"},
     "Heating": {False: "OFF", "ENABLED": True, "DISABLED": False},
@@ -56,116 +60,266 @@ HIVE_TYPES = {
     "Sensor": ["motionsensor", "contactsensor"],
     "Switch": ["activeplug"],
 }
-sensor_commands = {
-    "SMOKE_CO": "self.session.hub.getSmokeStatus(device)",
-    "DOG_BARK": "self.session.hub.getDogBarkStatus(device)",
-    "GLASS_BREAK": "self.session.hub.getGlassBreakStatus(device)",
-    "Camera_Temp": "self.session.camera.getCameraTemperature(device)",
-    "Current_Temperature": "self.session.heating.getCurrentTemperature(device)",
-    "Heating_Current_Temperature": "self.session.heating.getCurrentTemperature(device)",
-    "Heating_Target_Temperature": "self.session.heating.getTargetTemperature(device)",
-    "Heating_State": "self.session.heating.getState(device)",
-    "Heating_Mode": "self.session.heating.getMode(device)",
-    "Heating_Boost": "self.session.heating.getBoostStatus(device)",
-    "Hotwater_State": "self.session.hotwater.getState(device)",
-    "Hotwater_Mode": "self.session.hotwater.getMode(device)",
-    "Hotwater_Boost": "self.session.hotwater.getBoost(device)",
-    "Battery": 'self.session.attr.getBattery(device["device_id"])',
-    "Mode": 'self.session.attr.getMode(device["hiveID"])',
-    "Availability": "self.online(device)",
-    "Connectivity": "self.online(device)",
-    "Power": "self.session.switch.getPowerUsage(device)",
-}
 
 PRODUCTS = {
     "sense": [
-        'addList("binary_sensor", p, haName="Glass Detection", hiveType="GLASS_BREAK")',
-        'addList("binary_sensor", p, haName="Smoke Detection", hiveType="SMOKE_CO")',
-        'addList("binary_sensor", p, haName="Dog Bark Detection", hiveType="DOG_BARK")',
+        EntityConfig(
+            entity_type="binary_sensor",
+            ha_name="Glass Detection",
+            hive_type="GLASS_BREAK",
+        ),
+        EntityConfig(
+            entity_type="binary_sensor", ha_name="Smoke Detection", hive_type="SMOKE_CO"
+        ),
+        EntityConfig(
+            entity_type="binary_sensor",
+            ha_name="Dog Bark Detection",
+            hive_type="DOG_BARK",
+        ),
     ],
     "heating": [
-        'addList("climate", p, temperatureunit=self.data["user"]["temperatureUnit"])',
-        'addList("switch", p, haName=" Heat on Demand", hiveType="Heating_Heat_On_Demand", category="config")',
-        'addList("sensor", p, haName=" Current Temperature", hiveType="Heating_Current_Temperature", category="diagnostic")',
-        'addList("sensor", p, haName=" Target Temperature", hiveType="Heating_Target_Temperature", category="diagnostic")',
-        'addList("sensor", p, haName=" State", hiveType="Heating_State", category="diagnostic")',
-        'addList("sensor", p, haName=" Mode", hiveType="Heating_Mode", category="diagnostic")',
-        'addList("sensor", p, haName=" Boost", hiveType="Heating_Boost", category="diagnostic")',
+        EntityConfig(entity_type="climate"),
+        EntityConfig(
+            entity_type="switch",
+            ha_name=" Heat on Demand",
+            hive_type="Heating_Heat_On_Demand",
+            category="config",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Current Temperature",
+            hive_type="Heating_Current_Temperature",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Target Temperature",
+            hive_type="Heating_Target_Temperature",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" State",
+            hive_type="Heating_State",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Mode",
+            hive_type="Heating_Mode",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Boost",
+            hive_type="Heating_Boost",
+            category="diagnostic",
+        ),
     ],
     "trvcontrol": [
-        'addList("climate", p, temperatureunit=self.data["user"]["temperatureUnit"])',
-        'addList("sensor", p, haName=" Current Temperature", hiveType="Heating_Current_Temperature", category="diagnostic")',
-        'addList("sensor", p, haName=" Target Temperature", hiveType="Heating_Target_Temperature", category="diagnostic")',
-        'addList("sensor", p, haName=" State", hiveType="Heating_State", category="diagnostic")',
-        'addList("sensor", p, haName=" Mode", hiveType="Heating_Mode", category="diagnostic")',
-        'addList("sensor", p, haName=" Boost", hiveType="Heating_Boost", category="diagnostic")',
+        EntityConfig(entity_type="climate"),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Current Temperature",
+            hive_type="Heating_Current_Temperature",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Target Temperature",
+            hive_type="Heating_Target_Temperature",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" State",
+            hive_type="Heating_State",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Mode",
+            hive_type="Heating_Mode",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Boost",
+            hive_type="Heating_Boost",
+            category="diagnostic",
+        ),
     ],
     "hotwater": [
-        'addList("water_heater", p,)',
-        'addList("sensor", p, haName="Hotwater State", hiveType="Hotwater_State", category="diagnostic")',
-        'addList("sensor", p, haName="Hotwater Mode", hiveType="Hotwater_Mode", category="diagnostic")',
-        'addList("sensor", p, haName="Hotwater Boost", hiveType="Hotwater_Boost", category="diagnostic")',
+        EntityConfig(entity_type="water_heater"),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name="Hotwater State",
+            hive_type="Hotwater_State",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name="Hotwater Mode",
+            hive_type="Hotwater_Mode",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name="Hotwater Boost",
+            hive_type="Hotwater_Boost",
+            category="diagnostic",
+        ),
     ],
     "activeplug": [
-        'addList("switch", p)',
-        'addList("sensor", p, haName=" Mode", hiveType="Mode", category="diagnostic")',
-        'addList("sensor", p, haName=" Availability", hiveType="Availability", category="diagnostic")',
-        'addList("sensor", p, haName=" Power", hiveType="Power", category="diagnostic")',
+        EntityConfig(entity_type="switch"),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Mode",
+            hive_type="Mode",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Availability",
+            hive_type="Availability",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Power",
+            hive_type="Power",
+            category="diagnostic",
+        ),
     ],
     "warmwhitelight": [
-        'addList("light", p)',
-        'addList("sensor", p, haName=" Mode", hiveType="Mode", category="diagnostic")',
-        'addList("sensor", p, haName=" Availability", hiveType="Availability", category="diagnostic")',
+        EntityConfig(entity_type="light"),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Mode",
+            hive_type="Mode",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Availability",
+            hive_type="Availability",
+            category="diagnostic",
+        ),
     ],
     "tuneablelight": [
-        'addList("light", p)',
-        'addList("sensor", p, haName=" Mode", hiveType="Mode", category="diagnostic")',
-        'addList("sensor", p, haName=" Availability", hiveType="Availability", category="diagnostic")',
+        EntityConfig(entity_type="light"),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Mode",
+            hive_type="Mode",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Availability",
+            hive_type="Availability",
+            category="diagnostic",
+        ),
     ],
     "colourtuneablelight": [
-        'addList("light", p)',
-        'addList("sensor", p, haName=" Mode", hiveType="Mode", category="diagnostic")',
-        'addList("sensor", p, haName=" Availability", hiveType="Availability", category="diagnostic")',
+        EntityConfig(entity_type="light"),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Mode",
+            hive_type="Mode",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Availability",
+            hive_type="Availability",
+            category="diagnostic",
+        ),
     ],
-    #    "hivecamera": [
-    #        'addList("camera", p)',
-    #        'addList("sensor", p, haName=" Mode", hiveType="Mode", category="diagnostic")',
-    #        'addList("sensor", p, haName=" Availability", hiveType="Availability", category="diagnostic")',
-    #        'addList("sensor", p, haName=" Temperature", hiveType="Camera_Temp", category="diagnostic")',
-    #    ],
     "motionsensor": [
-        'addList("binary_sensor", p)',
-        'addList("sensor", p, haName=" Current Temperature", hiveType="Current_Temperature", category="diagnostic")',
+        EntityConfig(entity_type="binary_sensor"),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Current Temperature",
+            hive_type="Current_Temperature",
+            category="diagnostic",
+        ),
     ],
-    "contactsensor": ['addList("binary_sensor", p)'],
+    "contactsensor": [
+        EntityConfig(entity_type="binary_sensor"),
+    ],
 }
 
 DEVICES = {
     "contactsensor": [
-        'addList("sensor", d, haName=" Battery Level", hiveType="Battery", category="diagnostic")',
-        'addList("sensor", d, haName=" Availability", hiveType="Availability", category="diagnostic")',
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Battery Level",
+            hive_type="Battery",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Availability",
+            hive_type="Availability",
+            category="diagnostic",
+        ),
     ],
     "hub": [
-        'addList("binary_sensor", d, haName="Hive Hub Status", hiveType="Connectivity", category="diagnostic")',
+        EntityConfig(
+            entity_type="binary_sensor",
+            ha_name="Hive Hub Status",
+            hive_type="Connectivity",
+            category="diagnostic",
+        ),
     ],
     "motionsensor": [
-        'addList("sensor", d, haName=" Battery Level", hiveType="Battery", category="diagnostic")',
-        'addList("sensor", d, haName=" Availability", hiveType="Availability", category="diagnostic")',
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Battery Level",
+            hive_type="Battery",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Availability",
+            hive_type="Availability",
+            category="diagnostic",
+        ),
     ],
     "sense": [
-        'addList("binary_sensor", d, haName="Hive Hub Status", hiveType="Connectivity")',
+        EntityConfig(
+            entity_type="binary_sensor",
+            ha_name="Hive Hub Status",
+            hive_type="Connectivity",
+        ),
     ],
-    "siren": ['addList("alarm_control_panel", d)'],
     "thermostatui": [
-        'addList("sensor", d, haName=" Battery Level", hiveType="Battery", category="diagnostic")',
-        'addList("sensor", d, haName=" Availability", hiveType="Availability", category="diagnostic")',
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Battery Level",
+            hive_type="Battery",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Availability",
+            hive_type="Availability",
+            category="diagnostic",
+        ),
     ],
     "trv": [
-        'addList("sensor", d, haName=" Battery Level", hiveType="Battery", category="diagnostic")',
-        'addList("sensor", d, haName=" Availability", hiveType="Availability", category="diagnostic")',
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Battery Level",
+            hive_type="Battery",
+            category="diagnostic",
+        ),
+        EntityConfig(
+            entity_type="sensor",
+            ha_name=" Availability",
+            hive_type="Availability",
+            category="diagnostic",
+        ),
     ],
 }
-
-ACTIONS = (
-    'addList("switch", a, hiveName=a["name"], haName=a["name"], hiveType="action")'
-)

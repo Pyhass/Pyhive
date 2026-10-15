@@ -1,0 +1,163 @@
+name: Tests
+
+# No `paths:` filter on purpose: "Tests (Python 3.x)" and "Coverage" are
+# required checks, and a workflow skipped by a path filter never reports them,
+# leaving the PR blocked. The `changes` job below decides what to run instead.
+# yamllint disable-line rule:truthy
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+# Least privilege: the default GITHUB_TOKEN is read-only.
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      packaging: ${{ steps.filter.outputs.packaging }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Classify changed files
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            files=$(git diff --name-only "$PR_BASE...$PR_HEAD")
+          elif [ -z "$PUSH_BEFORE" ] || [ "$PUSH_BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            files=$(git ls-files)  # new branch: no previous commit to compare
+          else
+            files=$(git diff --name-only "$PUSH_BEFORE" "$PUSH_AFTER")
+          fi
+          echo "Changed files:"; echo "$files"
+
+          # Python code: any .py file, anything under src/ or tests/ (incl.
+          # fixture data), or this workflow itself.
+          if echo "$files" | grep -qE '\.py$|^src/|^tests/|^\.github/workflows/tests\.yml$'; then
+            echo "python=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "python=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Packaging: Python code, or the files that control the build.
+          if echo "$files" | grep -qE '\.py$|^src/|^scripts/|^pyproject\.toml$|^setup\.py$|^MANIFEST\.in$|^\.github/workflows/tests\.yml$'; then
+            echo "packaging=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "packaging=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  tests:
+    name: Tests (Python ${{ matrix.python-version }})
+    needs: changes
+    runs-on: ubuntu-latest
+    # Matrix jobs must not be skipped at job level: a skipped matrix job
+    # reports one unexpanded "Tests (Python ${{ ... }})" check, so the required
+    # per-version checks would never arrive. Skip the steps instead.
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    env:
+      RUN: ${{ needs.changes.outputs.python }}
+    steps:
+      - name: No Python changes — skipping tests
+        if: env.RUN != 'true'
+        run: echo "No Python code changed; tests not needed."
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        if: env.RUN == 'true'
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        if: env.RUN == 'true'
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        if: env.RUN == 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            libxml2-dev libxslt1-dev python3-dev build-essential
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        if: env.RUN == 'true'
+        run: pytest tests/ --tb=short --no-cov
+
+  coverage:
+    name: Coverage
+    needs: changes
+    # Not a matrix job, so a job-level skip reports "Coverage" as skipped,
+    # which satisfies the required check.
+    if: needs.changes.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.10"
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            libxml2-dev libxslt1-dev python3-dev build-essential
+          pip install -e ".[dev]"
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ --tb=short
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5  # v7.1.1
+        with:
+          files: coverage/lcov.info
+          flags: unittests
+          slug: ${{ github.repository }}
+          disable_search: true
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  packaging:
+    name: Packaging
+    needs: changes
+    if: needs.changes.outputs.packaging == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.x"
+
+      # verify_dist.py installs the wheel, which pulls pyquery -> lxml. Match the
+      # tests job so a Python version without prebuilt lxml wheels can still build.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            libxml2-dev libxslt1-dev python3-dev build-essential
+          python -m pip install build
+
+      - name: Build distributions
+        run: python -m build
+
+      # The test suite runs against src/ via an editable install, so it cannot
+      # see packaging mistakes. This installs the built wheel in a clean venv
+      # and imports every module in it.
+      - name: Verify built distribution is importable
+        run: python scripts/verify_dist.py dist

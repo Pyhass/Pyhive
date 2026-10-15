@@ -2,18 +2,15 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.3.x   | :white_check_mark: |
-| < 0.3   | :x:                |
+| Version | Supported |
+| ------- | --------- |
+| 2.x     | ✅        |
+| < 2.0   | ❌        |
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+Please **do not** open a public GitHub issue for security vulnerabilities.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Report vulnerabilities privately via [GitHub's security advisory feature](https://github.com/Pyhive/Pyhiveapi/security/advisories/new).
+
+You can expect an acknowledgement within 48 hours and a fix or mitigation within 14 days for confirmed issues. We will credit reporters in the release notes unless you prefer to remain anonymous.

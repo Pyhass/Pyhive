@@ -19,11 +19,19 @@ class NoApiToken(Exception):
     """
 
 
-class HiveApiError(Exception):
-    """Api error.
+class HiveError(Exception):
+    """Common base class for all Hive-specific exceptions.
 
     Args:
         Exception (object): Exception object to invoke
+    """
+
+
+class HiveApiError(HiveError):
+    """Api error.
+
+    Args:
+        HiveError (object): Parent Hive error class
     """
 
 
@@ -35,65 +43,91 @@ class HiveAuthError(HiveApiError):
     """
 
 
-class HiveRefreshTokenExpired(Exception):
+class HiveRefreshTokenExpired(HiveApiError):
     """Refresh token expired.
 
     Args:
-        Exception (object): Exception object to invoke
+        HiveApiError (object): Parent API error class
     """
 
 
-class HiveReauthRequired(Exception):
-    """Re-Authentication is required.
-
-    Args:
-        Exception (object): Exception object to invoke
-    """
-
-
-class HiveUnknownConfiguration(Exception):
-    """Unknown Hive Configuration.
-
-    Args:
-        Exception (object): Exception object to invoke
-    """
-
-
-class HiveInvalidUsername(Exception):
-    """Raise invalid Username.
-
-    Args:
-        Exception (object): Exception object to invoke
-    """
-
-
-class HiveInvalidPassword(Exception):
-    """Raise invalid password.
-
-    Args:
-        Exception (object): Exception object to invoke
-    """
-
-
-class HiveInvalid2FACode(Exception):
-    """Raise invalid 2FA code.
-
-    Args:
-        Exception (object): Exception object to invoke
-    """
-
-
-class HiveInvalidDeviceAuthentication(Exception):
-    """Raise invalid device authentication.
-
-    Args:
-        Exception (object): Exception object to invoke
-    """
-
-
-class HiveFailedToRefreshTokens(Exception):
+class HiveFailedToRefreshTokens(HiveApiError):
     """Raise invalid refresh tokens.
 
     Args:
-        Exception (object): Exception object to invoke
+        HiveApiError (object): Parent API error class
+    """
+
+
+class HiveConnectionError(HiveApiError):
+    """Hive could not be reached (timeout or network error).
+
+    The failure is expected to be transient, so callers can retry.
+
+    Args:
+        HiveApiError (object): Parent API error class
+    """
+
+
+class HiveConfigurationError(HiveError):
+    """Base class for configuration-related errors.
+
+    Args:
+        HiveError (object): Parent Hive error class
+    """
+
+
+class HiveUnknownConfiguration(HiveConfigurationError):
+    """Unknown Hive Configuration.
+
+    Args:
+        HiveConfigurationError (object): Parent configuration error class
+    """
+
+
+class HiveInvalidDeviceAuthentication(HiveConfigurationError):
+    """Raise invalid device authentication.
+
+    Args:
+        HiveConfigurationError (object): Parent configuration error class
+    """
+
+
+class HiveAuthCredentialError(HiveError):
+    """Base class for authentication credential errors.
+
+    Args:
+        HiveError (object): Parent Hive error class
+    """
+
+
+class HiveInvalidUsername(HiveAuthCredentialError):
+    """Raise invalid Username.
+
+    Args:
+        HiveAuthCredentialError (object): Parent credential error class
+    """
+
+
+class HiveInvalidPassword(HiveAuthCredentialError):
+    """Raise invalid password.
+
+    Args:
+        HiveAuthCredentialError (object): Parent credential error class
+    """
+
+
+class HiveInvalid2FACode(HiveAuthCredentialError):
+    """Raise invalid 2FA code.
+
+    Args:
+        HiveAuthCredentialError (object): Parent credential error class
+    """
+
+
+class HiveReauthRequired(HiveError):
+    """Re-Authentication is required.
+
+    Args:
+        HiveError (object): Parent Hive error class
     """

@@ -1,85 +1,20 @@
 """Start Hive Session."""
 
-# pylint: skip-file
+import asyncio
 import logging
-import sys
-import traceback
-from os.path import expanduser
-from typing import Optional
 
 from aiohttp import ClientSession
 
-from .action import HiveAction
-from .alarm import Alarm
-from .camera import Camera
-from .heating import Climate
-from .hotwater import WaterHeater
-from .hub import HiveHub
-from .light import Light
-from .plug import Switch
-from .sensor import Sensor
+from .devices.action import HiveAction
+from .devices.heating import Climate
+from .devices.hotwater import WaterHeater
+from .devices.hub import HiveHub
+from .devices.light import Light
+from .devices.plug import Switch
+from .devices.sensor import Sensor
 from .session import HiveSession
 
 _LOGGER = logging.getLogger(__name__)
-
-debug = []
-home = expanduser("~")
-
-
-def exception_handler(exctype, value, tb):
-    """Custom exception handler.
-
-    Args:
-        exctype ([type]): [description]
-        value ([type]): [description]
-        tb ([type]): [description]
-    """
-    last = len(traceback.extract_tb(tb)) - 1
-    _LOGGER.error(
-        f"-> \n"
-        f"Error in {traceback.extract_tb(tb)[last].filename}\n"
-        f"when running {traceback.extract_tb(tb)[last].name} function\n"
-        f"on line {traceback.extract_tb(tb)[last].lineno} - "
-        f"{traceback.extract_tb(tb)[last].line} \n"
-        f"with vars {traceback.extract_tb(tb)[last].locals}"
-    )
-    traceback.print_exc(tb)
-
-
-sys.excepthook = exception_handler
-
-
-def trace_debug(frame, event, arg):
-    """Trace functions.
-
-    Args:
-        frame (object): The current frame being debugged.
-        event (str): The event type
-        arg (dict): arguments in debug function..
-
-    Returns:
-        object: returns itself as per tracing docs
-    """
-    if "pyhiveapi/" in str(frame):
-        co = frame.f_code
-        func_name = co.co_name
-        func_line_no = frame.f_lineno
-        if func_name in debug:
-            if event == "call":
-                func_filename = co.co_filename.rsplit("/", 1)
-                caller = frame.f_back
-                caller_line_no = caller.f_lineno
-                caller_filename = caller.f_code.co_filename.rsplit("/", 1)
-
-                _LOGGER.debug(
-                    f"Call to {func_name} on line {func_line_no} "
-                    f"of {func_filename[1]} from line {caller_line_no} "
-                    f"of {caller_filename[1]}"
-                )
-            elif event == "return":
-                _LOGGER.debug(f"returning {arg}")
-
-        return trace_debug
 
 
 class Hive(HiveSession):
@@ -91,22 +26,21 @@ class Hive(HiveSession):
 
     def __init__(
         self,
-        websession: Optional[ClientSession] = None,
-        username: str = None,
-        password: str = None,
+        websession: ClientSession | None = None,
+        username: str | None = None,
+        password: str | None = None,
     ):
         """Generate a Hive session.
 
         Args:
-            websession (Optional[ClientSession], optional): This is a websession that can be used for the api. Defaults to None.
+            websession (Optional[ClientSession], optional): Websession for API calls.
+                Defaults to None.
             username (str, optional): This is the Hive username used for login. Defaults to None.
             password (str, optional): This is the Hive password used for login. Defaults to None.
         """
         super().__init__(username, password, websession)
         self.session = self
         self.action = HiveAction(self.session)
-        self.alarm = Alarm(self.session)
-        self.camera = Camera(self.session)
         self.heating = Climate(self.session)
         self.hotwater = WaterHeater(self.session)
         self.hub = HiveHub(self.session)
@@ -114,20 +48,18 @@ class Hive(HiveSession):
         self.switch = Switch(self.session)
         self.sensor = Sensor(self.session)
 
-        if debug:
-            sys.settrace(trace_debug)
+    async def force_update(self) -> bool:
+        """Immediately poll the Hive API, bypassing the 2-minute interval.
 
-    def setDebugging(self, debugger: list):
-        """Set function to debug.
-
-        Args:
-            debugger (list): a list of functions to debug
-
-        Returns:
-            object: Returns traceback object.
+        For power users only. If a poll is already in progress, skips and
+        returns False. Otherwise polls and returns True on success.
         """
-        global debug
-        debug = debugger
-        if debug:
-            return sys.settrace(trace_debug)
-        return sys.settrace(None)
+        if self.update_lock.locked():
+            _LOGGER.debug("force_update called while poll in progress — skipping.")
+            return False
+        async with self.update_lock:
+            self._update_task = asyncio.current_task()
+            try:
+                return await self._poll_devices()
+            finally:
+                self._update_task = None

@@ -1,4 +1,0 @@
-tox
-pylint
-pytest
-pbr

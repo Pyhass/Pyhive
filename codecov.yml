@@ -1,0 +1,13 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 10%  # fail if project coverage drops below 10%
+        threshold: 0%  # no tolerance
+    patch:
+      default:
+        target: 10%  # every PR diff must be fully covered
+        threshold: 0%
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default

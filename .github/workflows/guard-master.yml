@@ -1,0 +1,21 @@
+name: Guard master branch
+
+on:
+  pull_request:
+    branches: [master]
+
+# Least privilege: the default GITHUB_TOKEN is read-only.
+permissions:
+  contents: read
+
+jobs:
+  source-branch-is-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure PR source is dev
+        run: |
+          if [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "::error::PRs into master must come from 'dev' (got '${{ github.head_ref }}')."
+            exit 1
+          fi
+          echo "Source branch is dev. OK."

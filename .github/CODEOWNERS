@@ -1,0 +1,3 @@
+# Changes to CI/CD workflows, Dependabot config and this file need approval
+# from a maintainer before they can merge (enforced by branch protection).
+/.github/ @KJonline
