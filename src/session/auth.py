@@ -11,6 +11,7 @@ from ..helper.hive_exceptions import (
     HiveApiError,
     HiveFailedToRefreshTokens,
     HiveInvalid2FACode,
+    HiveInvalidDeviceAuthentication,
     HiveInvalidPassword,
     HiveInvalidUsername,
     HiveReauthRequired,
@@ -271,12 +272,22 @@ class SessionAuthMixin:
 
         Raises:
             HiveReauthRequired: User interaction required (SMS 2FA challenge),
-                                 credentials invalid, or all retries exhausted.
-            HiveApiError: API error or no internet connection.
+                                 credentials or saved device credentials
+                                 rejected, or all retries exhausted.
+
+        Any other failure (API, network or unexpected response) is retried, and
+        if every attempt fails ``HiveReauthRequired`` is raised so Home Assistant
+        asks the user to log in again.
         """
 
         async def _attempt():
-            result = await self.login()
+            try:
+                result = await self.login()
+            except Exception as err:
+                _LOGGER.warning(
+                    "_retry_login - Login attempt failed: %s", type(err).__name__
+                )
+                raise
             if result and result.get("ChallengeName") == self.auth.SMS_MFA_CHALLENGE:
                 _LOGGER.error(
                     "_retry_login - Login requires SMS 2FA. User must reauthenticate."
@@ -292,9 +303,14 @@ class SessionAuthMixin:
                     HiveReauthRequired,
                     HiveInvalidUsername,
                     HiveInvalidPassword,
+                    HiveInvalidDeviceAuthentication,
                 ),
             )
-        except (HiveInvalidUsername, HiveInvalidPassword) as exc:
+        except (
+            HiveInvalidUsername,
+            HiveInvalidPassword,
+            HiveInvalidDeviceAuthentication,
+        ) as exc:
             _LOGGER.error(
                 "_retry_login - Login failed with invalid credentials,"
                 " reauthentication required."

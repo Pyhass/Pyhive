@@ -3,18 +3,21 @@
 # pylint: disable=attribute-defined-outside-init,too-few-public-methods,protected-access
 import asyncio
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
 from apyhiveapi.helper.hive_exceptions import (
     HiveApiError,
     HiveFailedToRefreshTokens,
+    HiveInvalidDeviceAuthentication,
     HiveInvalidUsername,
     HiveReauthRequired,
     HiveUnknownConfiguration,
 )
 from apyhiveapi.helper.hivedataclasses import SessionConfig, SessionTokens
 from apyhiveapi.session.auth import SessionAuthMixin
+from botocore.exceptions import ReadTimeoutError
 
 AUTH_RESULT = {
     "AuthenticationResult": {
@@ -256,6 +259,56 @@ class TestRetryLogin:
         with pytest.raises(HiveReauthRequired):
             await s._retry_login()
 
+    async def test_api_error_retried_then_reauth(self):
+        """HiveApiError is retried on every attempt, then becomes HiveReauthRequired."""
+        s = _make_stub()
+        s.auth.login.side_effect = HiveApiError()
+        with (
+            patch("asyncio.sleep", AsyncMock()),
+            pytest.raises(HiveReauthRequired),
+        ):
+            await s._retry_login()
+        assert s.auth.login.call_count == 3
+
+    async def test_invalid_device_auth_converted_to_reauth_without_retry(self):
+        """Rejected device credentials need a new SMS login, so reauth at once."""
+        s = _make_stub()
+        s.auth.login.side_effect = HiveInvalidDeviceAuthentication()
+        with pytest.raises(HiveReauthRequired):
+            await s._retry_login()
+        assert s.auth.login.call_count == 1
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            ReadTimeoutError(endpoint_url="https://cognito-idp"),
+            aiohttp.ClientConnectionError("Cannot connect"),
+            KeyError("ChallengeName"),
+            HiveUnknownConfiguration(),
+        ],
+    )
+    async def test_any_failure_retried_then_reauth(self, error):
+        """Network, malformed-response and library errors are retried, then reauth."""
+        s = _make_stub()
+        s.auth.login.side_effect = error
+        with (
+            patch("asyncio.sleep", AsyncMock()),
+            pytest.raises(HiveReauthRequired),
+        ):
+            await s._retry_login()
+        assert s.auth.login.call_count == 3
+
+    async def test_transient_failure_recovers_on_retry(self):
+        """A failure followed by a successful login completes without reauth."""
+        s = _make_stub()
+        s.auth.login.side_effect = [
+            aiohttp.ClientConnectionError("Cannot connect"),
+            AUTH_RESULT,
+        ]
+        with patch("asyncio.sleep", AsyncMock()):
+            await s._retry_login()
+        assert s.auth.login.call_count == 2
+
     async def test_invalid_password_converted_to_reauth(self):
         """HiveInvalidPassword from login() is converted to HiveReauthRequired."""
         from apyhiveapi.helper.hive_exceptions import HiveInvalidPassword
@@ -443,8 +496,6 @@ class TestRetryWithBackoffNonZeroDelay:
 
     async def test_non_zero_delay_is_awaited_but_succeeds(self):
         """A non-zero delay entry causes asyncio.sleep to be called; factory still runs."""
-        from unittest.mock import patch
-
         s = _make_stub()
         calls = []
 
@@ -462,8 +513,6 @@ class TestRetryWithBackoffNonZeroDelay:
 
     async def test_zero_delay_does_not_call_sleep(self):
         """A zero delay skips asyncio.sleep."""
-        from unittest.mock import patch
-
         s = _make_stub()
 
         async def factory():

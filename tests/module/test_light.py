@@ -22,7 +22,7 @@ _CT_MAX_MIRED = round((1 / _CT_MIN_KELVIN) * 1_000_000)
 _HSV_HUE = 120
 _HSV_SAT = 100
 _HSV_VAL = 100
-_COLOR_TUPLE = (_HSV_HUE, _HSV_SAT)
+_COLOR_TUPLE = (0, 255, 0)
 
 
 def _make_light(products=None, devices=None):
@@ -276,7 +276,7 @@ class TestLightColorHandler:
         assert await light.get_color_temp(_make_device()) is None
 
     async def test_get_color_returns_rgb_tuple(self):
-        """get_color returns an (hue, saturation) 2-tuple for HA hs_color."""
+        """get_color returns an (r, g, b) 3-tuple for HA hs_color."""
         light = _make_light(
             {
                 "light-1": {

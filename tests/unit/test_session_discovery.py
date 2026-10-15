@@ -168,6 +168,61 @@ class TestStartSessionExtended:
         )
         assert s.tokens.token_created == created_ts
 
+    async def test_with_device_data_iso_string_token_created_is_parsed(self):
+        """An ISO string token_created (as stored by HA after a restart) is parsed."""
+        s = _make_stub()
+        s.config.file = False
+        created_ts = datetime(2024, 1, 15, 10, 30, 0, 123456)
+        await s.start_session(
+            {
+                "tokens": {},
+                "device_data": [
+                    "grp-key",
+                    "dev-key",
+                    "dev-pass",
+                    created_ts.isoformat(),
+                ],
+            }
+        )
+        assert s.tokens.token_created == created_ts
+
+    async def test_with_device_data_invalid_token_created_is_ignored(self):
+        """An unparsable token_created string leaves token_created unchanged."""
+        s = _make_stub()
+        s.config.file = False
+        original_created = s.tokens.token_created
+        await s.start_session(
+            {
+                "tokens": {},
+                "device_data": ["grp-key", "dev-key", "dev-pass", "not-a-date"],
+            }
+        )
+        assert s.tokens.token_created == original_created
+
+    async def test_scan_interval_option_is_applied(self):
+        """options.scan_interval from the HA config entry sets the poll interval."""
+        s = _make_stub()
+        s.config.file = False
+        s.update_interval = AsyncMock()
+        await s.start_session({"tokens": {}, "options": {"scan_interval": 300}})
+        s.update_interval.assert_called_once_with(300)
+
+    async def test_options_none_keeps_default(self):
+        """An explicit options=None is treated as no options."""
+        s = _make_stub()
+        s.config.file = False
+        s.update_interval = AsyncMock()
+        await s.start_session({"tokens": {}, "options": None})
+        s.update_interval.assert_not_called()
+
+    async def test_no_scan_interval_option_keeps_default(self):
+        """Without options.scan_interval the default interval is left alone."""
+        s = _make_stub()
+        s.config.file = False
+        s.update_interval = AsyncMock()
+        await s.start_session({"tokens": {}})
+        s.update_interval.assert_not_called()
+
     async def test_with_device_data_4_items_none_token_created_not_set(self):
         """4-item device_data where token_created is None — does not overwrite token_created."""
         s = _make_stub()

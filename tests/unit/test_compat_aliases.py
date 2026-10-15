@@ -4,6 +4,7 @@
 
 from unittest.mock import AsyncMock
 
+import pytest
 from apyhiveapi.helper.compat_aliases import (
     ActionCompatMixin,
     HeatingCompatMixin,
@@ -14,6 +15,7 @@ from apyhiveapi.helper.compat_aliases import (
     WaterHeaterCompatMixin,
 )
 from apyhiveapi.helper.hivedataclasses import Device, SessionConfig
+from apyhiveapi.session.polling import PollingMixin
 
 
 def _make_device():
@@ -323,7 +325,7 @@ class TestSessionCompatMixin:
     async def test_update_interval_returns_true(self):
         """updateInterval returns True and updates config.scan_interval."""
 
-        class Stub(SessionCompatMixin):
+        class Stub(SessionCompatMixin, PollingMixin):
             """Stub for updateInterval test."""
 
             device_list = {}
@@ -344,7 +346,7 @@ class TestSessionCompatMixin:
 def _make_concrete_session():
     """Return a minimal SessionCompatMixin subclass with a real SessionConfig."""
 
-    class ConcreteSession(SessionCompatMixin):
+    class ConcreteSession(SessionCompatMixin, PollingMixin):
         """Minimal concrete SessionCompatMixin for updateInterval tests."""
 
         def __init__(self):
@@ -376,6 +378,60 @@ class TestSessionCompatMixinUpdateInterval:
         session = _make_concrete_session()
         result = await session.updateInterval(60)
         assert result is True
+
+    async def test_update_interval_accepts_timedelta(self):
+        """updateInterval accepts a timedelta, as Hive 1.x did."""
+        from datetime import timedelta
+
+        session = _make_concrete_session()
+        await session.updateInterval(timedelta(minutes=5))
+        assert session.config.scan_interval == timedelta(minutes=5)
+
+    async def test_update_interval_enforces_minimum(self):
+        """updateInterval raises intervals below 15 seconds to 15 seconds."""
+        from datetime import timedelta
+
+        session = _make_concrete_session()
+        await session.updateInterval(5)
+        assert session.config.scan_interval == timedelta(seconds=15)
+
+
+# ---------------------------------------------------------------------------
+# camelCase aliases the Hive custom component calls (custom sensor.py)
+# ---------------------------------------------------------------------------
+
+
+class TestCustomComponentAliases:
+    """Aliases used by Pyhass/Hive-Custom-Component must delegate correctly."""
+
+    @pytest.mark.parametrize(
+        ("mixin", "alias", "target"),
+        [
+            (HeatingCompatMixin, "getBoostStatus", "get_boost_status"),
+            (HeatingCompatMixin, "getBoostTime", "get_boost_time"),
+            (HeatingCompatMixin, "currentTemperature", "get_current_temperature"),
+            (HeatingCompatMixin, "targetTemperature", "get_target_temperature"),
+            (HeatingCompatMixin, "minmaxTemperature", "minmax_temperature"),
+            (
+                HeatingCompatMixin,
+                "getScheduleNowNextLater",
+                "get_schedule_now_next_later",
+            ),
+            (WaterHeaterCompatMixin, "getBoost", "get_boost_status"),
+            (WaterHeaterCompatMixin, "getBoostTime", "get_boost_time"),
+            (
+                WaterHeaterCompatMixin,
+                "getScheduleNowNextLater",
+                "get_schedule_now_next_later",
+            ),
+        ],
+    )
+    async def test_alias_delegates(self, mixin, alias, target):
+        """Each alias awaits its snake_case method and returns its result."""
+        stub = type("Stub", (mixin,), {target: AsyncMock(return_value="result")})()
+        d = _make_device()
+        assert await getattr(stub, alias)(d) == "result"
+        getattr(stub, target).assert_called_once_with(d)
 
 
 # ---------------------------------------------------------------------------
