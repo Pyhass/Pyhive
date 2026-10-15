@@ -31,6 +31,7 @@ def _make_polling():
     p._update_task = None
     p._last_poll_slow = False
     p._slow_poll_threshold = 3
+    p._stale_state_polls = {}
     return p
 
 
