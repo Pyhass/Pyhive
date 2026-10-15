@@ -43,6 +43,7 @@ class SessionAuthMixin:
         delays: tuple = (0, 5, 10),
         reraise_as=None,
         pass_through: tuple = (),
+        retry_on: tuple = (Exception,),
     ):
         """Retry an async operation with sequential delays.
 
@@ -53,6 +54,8 @@ class SessionAuthMixin:
                         Defaults to the type of the last caught exception.
             pass_through: Exception types that bypass retrying and propagate
                           immediately to the caller.
+            retry_on: Exception types that are retried. Anything else propagates
+                      immediately. Defaults to every exception.
 
         Returns:
             The result of the first successful ``coro_factory()`` call.
@@ -68,7 +71,7 @@ class SessionAuthMixin:
                 return await coro_factory()
             except pass_through:
                 raise
-            except Exception as err:  # pylint: disable=broad-except
+            except retry_on as err:
                 last_err = err
         if reraise_as is not None:
             raise reraise_as() from last_err
@@ -272,7 +275,8 @@ class SessionAuthMixin:
         Raises:
             HiveReauthRequired: User interaction required (SMS 2FA challenge),
                                  credentials invalid, or all retries exhausted.
-            HiveApiError: API error or no internet connection.
+            Exception: Any error that is not a ``HiveApiError`` propagates
+                       unchanged without retrying.
         """
 
         async def _attempt():
@@ -293,6 +297,7 @@ class SessionAuthMixin:
                     HiveInvalidUsername,
                     HiveInvalidPassword,
                 ),
+                retry_on=(HiveApiError,),
             )
         except (HiveInvalidUsername, HiveInvalidPassword) as exc:
             _LOGGER.error(

@@ -36,6 +36,30 @@ class HeatingCompatMixin:
         """Backwards-compatible alias for get_climate."""
         return await self.get_climate(device)  # type: ignore[attr-defined]
 
+    async def getBoostStatus(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_boost_status."""
+        return await self.get_boost_status(device)  # type: ignore[attr-defined]
+
+    async def getBoostTime(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_boost_time."""
+        return await self.get_boost_time(device)  # type: ignore[attr-defined]
+
+    async def currentTemperature(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_current_temperature."""
+        return await self.get_current_temperature(device)  # type: ignore[attr-defined]
+
+    async def targetTemperature(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_target_temperature."""
+        return await self.get_target_temperature(device)  # type: ignore[attr-defined]
+
+    async def minmaxTemperature(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for minmax_temperature."""
+        return await self.minmax_temperature(device)  # type: ignore[attr-defined]
+
+    async def getScheduleNowNextLater(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_schedule_now_next_later."""
+        return await self.get_schedule_now_next_later(device)  # type: ignore[attr-defined]
+
 
 class LightCompatMixin:
     """CamelCase aliases for Light public methods."""
@@ -79,6 +103,18 @@ class WaterHeaterCompatMixin:
     async def get_boost(self, device: Device):  # pylint: disable=invalid-name
         """Backwards-compatible alias for get_boost_status."""
         return await self.get_boost_status(device)  # type: ignore[attr-defined]
+
+    async def getBoost(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_boost_status."""
+        return await self.get_boost_status(device)  # type: ignore[attr-defined]
+
+    async def getBoostTime(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_boost_time."""
+        return await self.get_boost_time(device)  # type: ignore[attr-defined]
+
+    async def getScheduleNowNextLater(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_schedule_now_next_later."""
+        return await self.get_schedule_now_next_later(device)  # type: ignore[attr-defined]
 
     async def setMode(self, device: Device, new_mode: str):  # pylint: disable=invalid-name
         """Backwards-compatible alias for set_mode."""
@@ -139,7 +175,6 @@ class SessionCompatMixin:
         """Backwards-compatible alias for update_data."""
         return await self.update_data(device)  # type: ignore[attr-defined]
 
-    async def updateInterval(self, new_interval: int):  # pylint: disable=invalid-name
-        """Backwards-compatible alias for Home Assistant Scan Interval."""
-        self.config.scan_interval = timedelta(seconds=new_interval)  # type: ignore[attr-defined]
-        return True
+    async def updateInterval(self, new_interval: int | float | timedelta):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for update_interval."""
+        return await self.update_interval(new_interval)  # type: ignore[attr-defined]

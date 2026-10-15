@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -115,6 +116,51 @@ class DiscoveryMixin:
             _LOGGER.error(error)
             return None
 
+    @staticmethod
+    def _parse_token_created(value: Any) -> datetime | None:
+        """Return the saved token-issue time as a datetime.
+
+        Home Assistant stores ``device_data`` as JSON, so after a restart the
+        datetime returned by ``get_device_data()`` comes back as an ISO string.
+
+        Args:
+            value: A datetime, an ISO 8601 string, or a falsy value.
+
+        Returns:
+            datetime | None: The parsed time, or None if it is missing or invalid.
+        """
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str) and value:
+            try:
+                return datetime.fromisoformat(value)
+            except ValueError:
+                _LOGGER.warning("start_session - Ignoring invalid token_created value")
+        return None
+
+    def _apply_device_data(self, device_data: list | tuple) -> None:
+        """Load saved device credentials (and token issue time) into the session.
+
+        Args:
+            device_data: ``(device_group_key, device_key, device_password)``,
+                optionally followed by ``token_created``.
+
+        Raises:
+            HiveUnknownConfiguration: Fewer than three values were given.
+        """
+        if len(device_data) < EXPECTED_DEVICE_DATA_LENGTH:
+            raise HiveUnknownConfiguration(
+                "device_data must contain device_group_key, "
+                "device_key and device_password"
+            )
+        self.auth.device_group_key = device_data[0]
+        self.auth.device_key = device_data[1]
+        self.auth.device_password = device_data[2]
+        if len(device_data) > EXPECTED_DEVICE_DATA_LENGTH:
+            token_created = self._parse_token_created(device_data[3])
+            if token_created is not None:
+                self.tokens.token_created = token_created  # type: ignore[attr-defined]
+
     async def start_session(self, config: dict | None = None):
         """Setup the Hive platform.
 
@@ -136,6 +182,10 @@ class DiscoveryMixin:
         )
         self._configure_file_mode(config.get("username", self.config.username))
 
+        scan_interval = config.get("options", {}).get("scan_interval")
+        if scan_interval is not None:
+            await self.update_interval(scan_interval)  # type: ignore[attr-defined]
+
         if config != {}:
             if "tokens" in config and not self.config.file:
                 _LOGGER.debug("start_session - Updating tokens from config")
@@ -148,19 +198,7 @@ class DiscoveryMixin:
                 self.auth.password = config["password"]
 
             if "device_data" in config and not self.config.file:
-                device_data = config["device_data"]
-                if len(device_data) < EXPECTED_DEVICE_DATA_LENGTH:
-                    raise HiveUnknownConfiguration(
-                        "device_data must contain device_group_key, "
-                        "device_key and device_password"
-                    )
-                self.auth.device_group_key = device_data[0]
-                self.auth.device_key = device_data[1]
-                self.auth.device_password = device_data[2]
-                if len(device_data) > EXPECTED_DEVICE_DATA_LENGTH:
-                    token_created = device_data[3]
-                    if token_created:
-                        self.tokens.token_created = token_created  # type: ignore[attr-defined]
+                self._apply_device_data(config["device_data"])
 
             if not self.config.file and "tokens" not in config:
                 raise HiveUnknownConfiguration

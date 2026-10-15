@@ -24,6 +24,9 @@ MAX_STALE_STATE_POLLS = 5
 # omitted at times, so keeping their old value would report stale state.
 REQUIRED_STATE_KEYS = frozenset({"mode", "name", "status", "target"})
 
+# Shortest polling interval allowed, to stay within Hive's API rate limits.
+MIN_SCAN_INTERVAL = timedelta(seconds=15)
+
 
 class PollingMixin:
     """Device polling, rate-limiting, and entity-cache methods.
@@ -143,6 +146,21 @@ class PollingMixin:
                 "values: %s",
                 "; ".join(sorted(incomplete)),
             )
+
+    async def update_interval(self, new_interval: int | float | timedelta) -> bool:
+        """Set the polling interval.
+
+        Args:
+            new_interval: Seconds, or a timedelta. Values below 15 seconds are
+                raised to 15 seconds.
+
+        Returns:
+            bool: True once the interval is set.
+        """
+        if not isinstance(new_interval, timedelta):
+            new_interval = timedelta(seconds=new_interval)
+        self.config.scan_interval = max(new_interval, MIN_SCAN_INTERVAL)
+        return True
 
     async def _poll_devices(self) -> bool:
         """Fetch latest device state from the Hive API."""

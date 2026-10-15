@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import colorsys
 import logging
 from typing import Any
 
@@ -71,18 +72,23 @@ class LightColorHandler:  # pylint: disable=no-member
         return None
 
     async def get_color(self, device: Device):
-        """Get light current colour as an HS tuple for HA hs_color.
+        """Get light current colour as an RGB tuple.
+
+        Home Assistant reads ``status["hs_color"]`` and converts it with
+        ``color_RGB_to_hs(*rgb)``, so this must stay an RGB 3-tuple.
 
         Args:
             device (Device): Device to query.
 
         Returns:
-            tuple | None: ``(hue_degrees, saturation_percent)`` where hue is
-                0–360 and saturation is 0–100, or None on error.
+            tuple | None: ``(red, green, blue)``, each 0–255, or None on error.
         """
         try:
-            data = self.session.data.products[device.hive_id]
-            return (data["state"]["hue"], data["state"]["saturation"])
+            state = self.session.data.products[device.hive_id]["state"]
+            rgb = colorsys.hsv_to_rgb(
+                state["hue"] / 360, state["saturation"] / 100, state["value"] / 100
+            )
+            return tuple(int(channel * 255) for channel in rgb)
         except KeyError as e:
             _LOGGER.error(e)
         return None

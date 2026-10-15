@@ -3,12 +3,13 @@
 # pylint: disable=attribute-defined-outside-init,too-few-public-methods,protected-access
 import asyncio
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from apyhiveapi.helper.hive_exceptions import (
     HiveApiError,
     HiveFailedToRefreshTokens,
+    HiveInvalidDeviceAuthentication,
     HiveInvalidUsername,
     HiveReauthRequired,
     HiveUnknownConfiguration,
@@ -256,6 +257,25 @@ class TestRetryLogin:
         with pytest.raises(HiveReauthRequired):
             await s._retry_login()
 
+    async def test_api_error_retried_then_reauth(self):
+        """HiveApiError is retried on every attempt, then becomes HiveReauthRequired."""
+        s = _make_stub()
+        s.auth.login.side_effect = HiveApiError()
+        with (
+            patch("asyncio.sleep", AsyncMock()),
+            pytest.raises(HiveReauthRequired),
+        ):
+            await s._retry_login()
+        assert s.auth.login.call_count == 3
+
+    async def test_non_api_error_propagates_without_retry(self):
+        """Errors that are not HiveApiError propagate unchanged on the first attempt."""
+        s = _make_stub()
+        s.auth.login.side_effect = HiveInvalidDeviceAuthentication()
+        with pytest.raises(HiveInvalidDeviceAuthentication):
+            await s._retry_login()
+        assert s.auth.login.call_count == 1
+
     async def test_invalid_password_converted_to_reauth(self):
         """HiveInvalidPassword from login() is converted to HiveReauthRequired."""
         from apyhiveapi.helper.hive_exceptions import HiveInvalidPassword
@@ -443,8 +463,6 @@ class TestRetryWithBackoffNonZeroDelay:
 
     async def test_non_zero_delay_is_awaited_but_succeeds(self):
         """A non-zero delay entry causes asyncio.sleep to be called; factory still runs."""
-        from unittest.mock import patch
-
         s = _make_stub()
         calls = []
 
@@ -462,8 +480,6 @@ class TestRetryWithBackoffNonZeroDelay:
 
     async def test_zero_delay_does_not_call_sleep(self):
         """A zero delay skips asyncio.sleep."""
-        from unittest.mock import patch
-
         s = _make_stub()
 
         async def factory():
