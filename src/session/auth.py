@@ -44,7 +44,6 @@ class SessionAuthMixin:
         delays: tuple = (0, 5, 10),
         reraise_as=None,
         pass_through: tuple = (),
-        retry_on: tuple = (Exception,),
     ):
         """Retry an async operation with sequential delays.
 
@@ -55,8 +54,6 @@ class SessionAuthMixin:
                         Defaults to the type of the last caught exception.
             pass_through: Exception types that bypass retrying and propagate
                           immediately to the caller.
-            retry_on: Exception types that are retried. Anything else propagates
-                      immediately. Defaults to every exception.
 
         Returns:
             The result of the first successful ``coro_factory()`` call.
@@ -72,7 +69,7 @@ class SessionAuthMixin:
                 return await coro_factory()
             except pass_through:
                 raise
-            except retry_on as err:
+            except Exception as err:  # pylint: disable=broad-except
                 last_err = err
         if reraise_as is not None:
             raise reraise_as() from last_err
@@ -277,12 +274,20 @@ class SessionAuthMixin:
             HiveReauthRequired: User interaction required (SMS 2FA challenge),
                                  credentials or saved device credentials
                                  rejected, or all retries exhausted.
-            Exception: Any error that is not a ``HiveApiError`` propagates
-                       unchanged without retrying.
+
+        Any other failure (API, network or unexpected response) is retried, and
+        if every attempt fails ``HiveReauthRequired`` is raised so Home Assistant
+        asks the user to log in again.
         """
 
         async def _attempt():
-            result = await self.login()
+            try:
+                result = await self.login()
+            except Exception as err:
+                _LOGGER.warning(
+                    "_retry_login - Login attempt failed: %s", type(err).__name__
+                )
+                raise
             if result and result.get("ChallengeName") == self.auth.SMS_MFA_CHALLENGE:
                 _LOGGER.error(
                     "_retry_login - Login requires SMS 2FA. User must reauthenticate."
@@ -300,7 +305,6 @@ class SessionAuthMixin:
                     HiveInvalidPassword,
                     HiveInvalidDeviceAuthentication,
                 ),
-                retry_on=(HiveApiError,),
             )
         except (
             HiveInvalidUsername,

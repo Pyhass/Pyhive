@@ -88,7 +88,7 @@ class LightColorHandler:  # pylint: disable=no-member
             rgb = colorsys.hsv_to_rgb(
                 state["hue"] / 360, state["saturation"] / 100, state["value"] / 100
             )
-            return tuple(int(channel * 255) for channel in rgb)
+            return tuple(round(channel * 255) for channel in rgb)
         except KeyError as e:
             _LOGGER.error(e)
         return None

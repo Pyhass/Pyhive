@@ -5,6 +5,7 @@ import asyncio
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
 from apyhiveapi.helper.hive_exceptions import (
     HiveApiError,
@@ -16,6 +17,7 @@ from apyhiveapi.helper.hive_exceptions import (
 )
 from apyhiveapi.helper.hivedataclasses import SessionConfig, SessionTokens
 from apyhiveapi.session.auth import SessionAuthMixin
+from botocore.exceptions import ReadTimeoutError
 
 AUTH_RESULT = {
     "AuthenticationResult": {
@@ -276,13 +278,36 @@ class TestRetryLogin:
             await s._retry_login()
         assert s.auth.login.call_count == 1
 
-    async def test_unexpected_error_propagates_without_retry(self):
-        """Errors outside the Hive API (e.g. a library bug) propagate unchanged."""
+    @pytest.mark.parametrize(
+        "error",
+        [
+            ReadTimeoutError(endpoint_url="https://cognito-idp"),
+            aiohttp.ClientConnectionError("Cannot connect"),
+            KeyError("ChallengeName"),
+            HiveUnknownConfiguration(),
+        ],
+    )
+    async def test_any_failure_retried_then_reauth(self, error):
+        """Network, malformed-response and library errors are retried, then reauth."""
         s = _make_stub()
-        s.auth.login.side_effect = KeyError("ChallengeName")
-        with pytest.raises(KeyError):
+        s.auth.login.side_effect = error
+        with (
+            patch("asyncio.sleep", AsyncMock()),
+            pytest.raises(HiveReauthRequired),
+        ):
             await s._retry_login()
-        assert s.auth.login.call_count == 1
+        assert s.auth.login.call_count == 3
+
+    async def test_transient_failure_recovers_on_retry(self):
+        """A failure followed by a successful login completes without reauth."""
+        s = _make_stub()
+        s.auth.login.side_effect = [
+            aiohttp.ClientConnectionError("Cannot connect"),
+            AUTH_RESULT,
+        ]
+        with patch("asyncio.sleep", AsyncMock()):
+            await s._retry_login()
+        assert s.auth.login.call_count == 2
 
     async def test_invalid_password_converted_to_reauth(self):
         """HiveInvalidPassword from login() is converted to HiveReauthRequired."""

@@ -176,3 +176,12 @@ class TestGetColorReturnsRGBTuple:
         device = _make_device()
         result = await h.get_color(device)
         assert result == (102, 204, 204)
+
+    async def test_get_color_rounds_channels(self):
+        """Channels are rounded, not truncated (2.55 -> 3, not 2)."""
+        session = _make_session(
+            {"light-1": {"state": {"hue": 0, "saturation": 99, "value": 100}}}
+        )
+        h = _make_handler(session)
+        result = await h.get_color(_make_device())
+        assert result == (255, 3, 3)
