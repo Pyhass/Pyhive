@@ -403,6 +403,31 @@ class TestGetActions:
 # ---------------------------------------------------------------------------
 
 
+class TestGetHeatingHistory:
+    def test_builds_url_and_returns_data(self):
+        api = _make_api()
+        payload = {"data": [{"date": "1", "temperature": 20.5}]}
+        mock_resp = _make_mock_response(200, json_data=payload)
+
+        with patch.object(api, "request", return_value=mock_resp) as mock_req:
+            result = api.get_heating_history("node-1", 1000, 2000, "DAYS", 3)
+
+        assert result["original"] == 200
+        assert result["parsed"] == payload
+        assert mock_req.call_args[0][1] == (
+            api.urls["base"]
+            + "/history/heating/node-1?start=1000&end=2000"
+            + "&timeUnit=DAYS&rate=3&operation=AVG"
+        )
+
+    def test_defaults_to_hourly_average(self):
+        api = _make_api()
+        mock_resp = _make_mock_response(200, json_data={"data": []})
+        with patch.object(api, "request", return_value=mock_resp) as mock_req:
+            api.get_heating_history("node-1", 1, 2)
+        assert "timeUnit=HOURS&rate=1&operation=AVG" in mock_req.call_args[0][1]
+
+
 class TestMotionSensor:
     def test_builds_url_and_returns_data(self):
         api = _make_api()

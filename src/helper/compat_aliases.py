@@ -60,6 +60,19 @@ class HeatingCompatMixin:
         """Backwards-compatible alias for get_schedule_now_next_later."""
         return await self.get_schedule_now_next_later(device)  # type: ignore[attr-defined]
 
+    async def getTemperatureHistory(  # pylint: disable=invalid-name
+        self,
+        device: Device,
+        start: int,
+        end: int,
+        time_unit: str = "HOURS",
+        rate: int = 1,
+    ):
+        """Backwards-compatible alias for get_temperature_history."""
+        return await self.get_temperature_history(  # type: ignore[attr-defined]
+            device, start, end, time_unit, rate
+        )
+
 
 class LightCompatMixin:
     """CamelCase aliases for Light public methods."""

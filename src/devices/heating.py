@@ -7,6 +7,7 @@ from typing import Any
 from ..helper.compat_aliases import HeatingCompatMixin
 from ..helper.const import HIVETOHA
 from ..helper.device_handler_base import BaseDeviceHandler
+from ..helper.hive_exceptions import HiveApiError
 from ..helper.hivedataclasses import Device
 from .boost import BoostMixin
 
@@ -47,6 +48,57 @@ class HiveHeating(BoostMixin, BaseDeviceHandler):
         if device.hive_type == "nathermostat":
             return self._get_product_state(device, "props", "maxHeat")
         return 32
+
+    async def get_temperature_history(
+        self,
+        device: Device,
+        start: int,
+        end: int,
+        time_unit: str = "HOURS",
+        rate: int = 1,
+    ) -> list[dict[str, Any]]:
+        """Return recorded temperatures for a heating zone.
+
+        Args:
+            device: The heating device (thermostat zone).
+            start: Range start, milliseconds since the Unix epoch.
+            end: Range end, milliseconds since the Unix epoch.
+            time_unit: YEARS, DAYS, HOURS, MINUTES or SECONDS.
+            rate: Number of ``time_unit`` per bucket.
+
+        Returns:
+            A list of ``{"date": <ms since epoch, int>, "temperature": <float>}``
+            sorted by date. Empty if Hive has no data or the request fails.
+
+        Hive averages readings within each bucket. The endpoint is only
+        known to work for ``heating`` zones; TRV zones return 404.
+        """
+        if self.session.config.file:
+            return []
+        try:
+            resp = await self.session.api.get_heating_history(
+                device.hive_id, start, end, time_unit, rate
+            )
+        except HiveApiError:
+            _LOGGER.warning(
+                "get_temperature_history - Hive returned no history for %s",
+                device.ha_name,
+            )
+            return []
+        parsed = resp.get("parsed") if isinstance(resp, dict) else None
+        rows = parsed.get("data") if isinstance(parsed, dict) else None
+        if not isinstance(rows, list):
+            return []
+        history = []
+        for row in rows:
+            try:
+                history.append(
+                    {"date": int(row["date"]), "temperature": float(row["temperature"])}
+                )
+            except (KeyError, TypeError, ValueError):
+                _LOGGER.debug("get_temperature_history - skipping row %s", row)
+        history.sort(key=lambda r: r["date"])
+        return history
 
     def _track_minmax(self, hive_id: str, temperature: float) -> None:
         """Record today's and since-restart min/max temperatures for a device."""
