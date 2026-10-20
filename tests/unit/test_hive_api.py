@@ -206,6 +206,27 @@ class TestGetLoginInfo:
         # REGION mirrors UPID
         assert result["REGION"] == "eu-west-1_abc"
 
+    def test_parses_single_quoted_assignments_with_spaces(self):
+        """Parses the SSO page format in use since October 2026."""
+        api = _make_api()
+        html_content = (
+            b"<script>"
+            b"window.HiveSSOPoolId = 'eu-west-1_abc';\n"
+            b"window.HiveSSOPublicCognitoClientId = 'client123';"
+            b"</script>"
+        )
+        mock_resp = MagicMock()
+        mock_resp.content = html_content
+        mock_resp.status_code = 200
+
+        with patch("apyhiveapi.api.hive_api.requests.get", return_value=mock_resp):
+            result = api.get_login_info()
+
+        assert result is not None
+        assert result["UPID"] == "eu-west-1_abc"
+        assert result["CLIID"] == "client123"
+        assert result["REGION"] == "eu-west-1_abc"
+
     def test_os_error_calls_error_and_raises_connection_error(self):
         api = _make_api()
         with (
