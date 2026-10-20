@@ -17,7 +17,7 @@ def requirements_from_file(filename="requirements.txt"):
 
 
 setup(
-    version="1.0.9",
+    version="1.0.10",
     packages=["apyhiveapi", "apyhiveapi.api", "apyhiveapi.helper"],
     package_dir={"apyhiveapi": "src"},
     package_data={"data": ["*.json"]},
