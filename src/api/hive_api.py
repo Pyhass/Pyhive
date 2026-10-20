@@ -3,6 +3,7 @@
 # pylint: skip-file
 import json
 import logging
+import re
 
 import requests
 import urllib3
@@ -11,6 +12,11 @@ from pyquery import PyQuery
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 _LOGGER = logging.getLogger(__name__)
+
+# The SSO bootstrap page embeds its config as `window.<key> = <value>`
+# assignments. The value quoting changed from double to single quotes on
+# 2026-10-20, so accept either (and require the closing quote to match).
+_SSO_ASSIGNMENT = re.compile(r"""window\.(\w+)\s*=\s*(["'])(.*?)\2""")
 
 
 class HiveApi:
@@ -106,7 +112,7 @@ class HiveApi:
         jsc = (
             "{"
             + ",".join(
-                ('"' + str(i) + '": ' '"' + str(t) + '" ' for i, t in tokens.items())
+                ('"' + str(i) + '": "' + str(t) + '" ' for i, t in tokens.items())
             )
             + "}"
         )
@@ -140,14 +146,12 @@ class HiveApi:
                 "getLoginInfo - Login info response status: %s", data.status_code
             )
             html = PyQuery(data.content)
-            json_data = json.loads(
-                '{"'
-                + (html("script:first").text())
-                .replace(",", ', "')
-                .replace("=", '":')
-                .replace("window.", "")
-                + "}"
-            )
+            json_data = {
+                key: value
+                for key, _quote, value in _SSO_ASSIGNMENT.findall(
+                    html("script:first").text()
+                )
+            }
 
             loginData = {}
             loginData.update({"UPID": json_data["HiveSSOPoolId"]})
@@ -311,7 +315,7 @@ class HiveApi:
         jsc = (
             "{"
             + ",".join(
-                ('"' + str(i) + '": ' '"' + str(t) + '" ' for i, t in kwargs.items())
+                ('"' + str(i) + '": "' + str(t) + '" ' for i, t in kwargs.items())
             )
             + "}"
         )
