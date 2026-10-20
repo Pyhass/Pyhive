@@ -4,6 +4,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from apyhiveapi import Hive
 from apyhiveapi.helper.hive_exceptions import (
     HiveUnknownConfiguration,
 )
@@ -169,3 +170,22 @@ class TestCreateDevices:
         }
         result = await s.create_devices()
         assert len(result["climate"]) == 1
+
+
+async def test_file_fixture_has_no_dangling_parents(caplog):
+    """Every product parent in the bundled fixture resolves to a device.
+
+    Regression test: the sense product once pointed at a parent ID that no
+    device had, so add_list logged a KeyError for each sense entity and the
+    Glass/Smoke/Dog Bark binary sensors were silently dropped.
+    """
+    async with Hive(username="use@file.com", password="x") as hive:
+        device_list = await hive.start_session({})
+
+    assert not [r for r in caplog.records if r.levelname == "ERROR"]
+    sense_names = {
+        d.ha_name
+        for d in device_list["binary_sensor"]
+        if d.device_id.startswith("hub-")
+    }
+    assert {"Glass Detection", "Smoke Detection", "Dog Bark Detection"} <= sense_names
