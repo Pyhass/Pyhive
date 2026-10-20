@@ -18,7 +18,10 @@ _ERROR_RESPONSE = "Error making API call"
 # json.JSONDecodeError subclass.
 _REQUEST_ERRORS = (OSError, RuntimeError, json.JSONDecodeError)
 
-_SSO_ASSIGNMENT = re.compile(r'window\.(\w+)\s*=\s*"([^"]*)"')
+# The SSO bootstrap page embeds its config as `window.<key> = <value>`
+# assignments. The value quoting changed from double to single quotes on
+# 2026-10-20, so accept either (and require the closing quote to match).
+_SSO_ASSIGNMENT = re.compile(r"""window\.(\w+)\s*=\s*(["'])(.*?)\2""")
 
 
 class HiveApi:
@@ -118,7 +121,10 @@ class HiveApi:
                 "get_login_info - Login info response status: %s", data.status_code
             )
             script_text = PyQuery(data.content)("script:first").text()
-            sso_values = dict(_SSO_ASSIGNMENT.findall(script_text))
+            sso_values = {
+                key: value
+                for key, _quote, value in _SSO_ASSIGNMENT.findall(script_text)
+            }
 
             login_data = {
                 "UPID": sso_values["HiveSSOPoolId"],

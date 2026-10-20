@@ -57,3 +57,6 @@ htmlcov/
 
 # Local session runner logs (scripts/run_session.py)
 logs/
+
+# Device credentials written by examples/example_login.py
+hive_device.json

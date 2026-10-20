@@ -99,6 +99,19 @@ except HiveSmsRequired:
 
 > **Note:** Only the Hive account owner is supported. Guest accounts cannot be used.
 
+### Standalone login example
+
+[`examples/example_login.py`](examples/example_login.py) is a complete runnable
+script. The first run asks for your email, password and SMS code, registers the
+machine as a trusted device and saves the device credentials to
+`hive_device.json`. Later runs log in with that file and skip the SMS. Both runs
+list every discovered device.
+
+```bash
+pip install pyhive-integration
+python examples/example_login.py
+```
+
 ---
 
 ## Controlling Devices

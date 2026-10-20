@@ -206,6 +206,43 @@ class TestGetLoginInfo:
         # REGION mirrors UPID
         assert result["REGION"] == "eu-west-1_abc"
 
+    def test_single_quoted_values_are_parsed(self):
+        """Since 2026-10-20 the SSO page uses single quotes and spaces around =."""
+        api = _make_api()
+        html_content = (
+            b"<script>\n"
+            b"        window.HiveSSOPoolId = 'eu-west-1_abc'\n"
+            b"        window.HiveSSOCognitoClientId = 'private123'\n"
+            b"        window.HiveSSOPublicCognitoClientId = 'client123'\n"
+            b"        window.HiveSSOState = '%%STATE%%'\n"
+            b"    </script>"
+        )
+        mock_resp = MagicMock()
+        mock_resp.content = html_content
+        mock_resp.status_code = 200
+
+        with patch("apyhiveapi.api.hive_api.requests.get", return_value=mock_resp):
+            result = api.get_login_info()
+
+        assert result == {
+            "UPID": "eu-west-1_abc",
+            "CLIID": "client123",
+            "REGION": "eu-west-1_abc",
+        }
+
+    def test_mismatched_quotes_are_not_parsed(self):
+        """A value must be closed by the same quote character it was opened with."""
+        api = _make_api()
+        html_content = b"<script>window.HiveSSOPoolId = 'eu-west-1_abc\"</script>"
+        mock_resp = MagicMock()
+        mock_resp.content = html_content
+        mock_resp.status_code = 200
+
+        with patch("apyhiveapi.api.hive_api.requests.get", return_value=mock_resp):
+            result = api.get_login_info()
+
+        assert result is None
+
     def test_os_error_calls_error_and_raises_connection_error(self):
         api = _make_api()
         with (
