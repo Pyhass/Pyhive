@@ -538,7 +538,6 @@ class TestHiveHelperZoneMismatch:
 
     def test_trv_without_zone_does_not_log_warning(self, caplog):
         """TRV devices that omit 'zone' from props are silently skipped (no warning)."""
-        import logging
 
         helper, _ = _make_helper(
             devices={
