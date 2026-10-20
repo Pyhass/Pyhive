@@ -18,7 +18,8 @@ _ERROR_RESPONSE = "Error making API call"
 # json.JSONDecodeError subclass.
 _REQUEST_ERRORS = (OSError, RuntimeError, json.JSONDecodeError)
 
-_SSO_ASSIGNMENT = re.compile(r'window\.(\w+)\s*=\s*"([^"]*)"')
+# The SSO page has used both `window.Key="value",` and `window.Key = 'value';`.
+_SSO_ASSIGNMENT = re.compile(r"""window\.(\w+)\s*=\s*["']([^"']*)["']""")
 
 
 class HiveApi:
