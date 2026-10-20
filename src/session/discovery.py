@@ -113,7 +113,16 @@ class DiscoveryMixin:
             self.device_list[entity_type].append(device_obj)
             return device_obj
         except KeyError as error:
-            _LOGGER.error(error)
+            # str(KeyError()) is empty, so name the entity and key explicitly;
+            # a bare _LOGGER.error(error) showed up as a blank log entry.
+            missing = error.args[0] if error.args else "unknown key"
+            _LOGGER.warning(
+                "Skipping %s entity for Hive %s %s: missing data (%s)",
+                entity_type,
+                data.get("type", "device"),
+                data.get("id", "unknown"),
+                missing,
+            )
             return None
 
     @staticmethod

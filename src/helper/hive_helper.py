@@ -168,10 +168,7 @@ class HiveHelper:
             if trv_present:
                 device = self.session.data.devices[product["props"]["trvs"][0]]
             else:
-                _LOGGER.error(
-                    "get_device_data - No TRVs found for product %s", product_id
-                )
-                raise KeyError
+                raise KeyError(f"no TRVs linked to trvcontrol product {product_id}")
         elif (
             product_type == "warmwhitelight" and product["props"]["model"] == "SIREN001"
         ):
