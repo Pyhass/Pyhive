@@ -125,6 +125,12 @@ await hive.heating.set_mode(device, "SCHEDULE")
 await hive.heating.set_boost_on(device, mins=30, temp=22.0)
 await hive.heating.set_boost_off(device)
 
+# Weekly schedule (heating and hot water). Hive only accepts the whole
+# week, so edit the dict from get_schedule and pass it back.
+schedule = await hive.heating.get_schedule(device)
+schedule["monday"][0]["value"]["target"] = 19.5   # heating slots: {"target": °C}
+await hive.heating.set_schedule(device, schedule)  # hot water slots: {"status": "ON"|"OFF"}
+
 # Hot water
 await hive.hotwater.set_mode(device, "ON")
 await hive.hotwater.set_boost_on(device, mins=60)

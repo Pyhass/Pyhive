@@ -60,6 +60,14 @@ class HeatingCompatMixin:
         """Backwards-compatible alias for get_schedule_now_next_later."""
         return await self.get_schedule_now_next_later(device)  # type: ignore[attr-defined]
 
+    async def getSchedule(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_schedule."""
+        return await self.get_schedule(device)  # type: ignore[attr-defined]
+
+    async def setSchedule(self, device: Device, schedule: dict):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for set_schedule."""
+        return await self.set_schedule(device, schedule)  # type: ignore[attr-defined]
+
 
 class LightCompatMixin:
     """CamelCase aliases for Light public methods."""
@@ -115,6 +123,14 @@ class WaterHeaterCompatMixin:
     async def getScheduleNowNextLater(self, device: Device):  # pylint: disable=invalid-name
         """Backwards-compatible alias for get_schedule_now_next_later."""
         return await self.get_schedule_now_next_later(device)  # type: ignore[attr-defined]
+
+    async def getSchedule(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_schedule."""
+        return await self.get_schedule(device)  # type: ignore[attr-defined]
+
+    async def setSchedule(self, device: Device, schedule: dict):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for set_schedule."""
+        return await self.set_schedule(device, schedule)  # type: ignore[attr-defined]
 
     async def setMode(self, device: Device, new_mode: str):  # pylint: disable=invalid-name
         """Backwards-compatible alias for set_mode."""
