@@ -21,7 +21,7 @@ A Python library for interfacing with the [Hive](https://www.hivehome.com/) smar
 
 | Device Type | Capabilities |
 | --- | --- |
-| **Heating** (thermostat, TRV) | Current / target temperature, mode (schedule / manual / off), boost on/off, heat-on-demand, min/max range, schedule now/next/later |
+| **Heating** (thermostat, TRV) | Current / target temperature, mode (schedule / manual / off), boost on/off, heat-on-demand, min/max range, schedule now/next/later, temperature history |
 | **Hot Water** | Mode (schedule / on / off), boost on/off, state |
 | **Lights** | On/off, brightness, colour temperature, full RGB colour, colour mode |
 | **Smart Plugs** | On/off, power usage |
@@ -124,6 +124,10 @@ await hive.heating.set_target_temperature(device, 21.0)
 await hive.heating.set_mode(device, "SCHEDULE")
 await hive.heating.set_boost_on(device, mins=30, temp=22.0)
 await hive.heating.set_boost_off(device)
+
+# Temperature history for a heating zone (ms since epoch; HOURS/DAYS/...).
+# Returns [{"date": <ms>, "temperature": <°C>}, ...], averaged per bucket.
+history = await hive.heating.get_temperature_history(device, start_ms, end_ms, "HOURS")
 
 # Hot water
 await hive.hotwater.set_mode(device, "ON")
