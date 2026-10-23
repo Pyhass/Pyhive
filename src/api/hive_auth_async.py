@@ -413,6 +413,11 @@ class HiveAuthAsync(DeviceRegistrationMixin):
             _LOGGER.error("Device login failed: cannot reach endpoint.")
             raise HiveApiError from err
 
+        if result and "AuthenticationResult" in result:
+            # Record the access token and issue time so get_device_data() reports
+            # when these tokens were created, not None, after a device login.
+            self._store_auth_result(result)
+
         _LOGGER.debug("device_login - Device authentication completed successfully.")
         return result
 
