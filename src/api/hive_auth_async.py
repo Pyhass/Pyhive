@@ -88,6 +88,21 @@ class HiveAuthAsync(DeviceRegistrationMixin):
         self._region: str | None = None
         self.client: Any = None
 
+    @property
+    def username(self) -> str:
+        """Return the Hive username, normalised for Cognito."""
+        return self._username
+
+    @username.setter
+    def username(self, value: str) -> None:
+        """Store the username trimmed and lower-cased.
+
+        Hive's Cognito pool treats the email as case-sensitive, so a
+        capitalised address (e.g. from mobile autocapitalisation) fails
+        with an invalid-password error even though the account exists.
+        """
+        self._username = value.strip().lower() if isinstance(value, str) else value
+
     async def async_init(self):
         """Initialise async variables."""
         self.loop = asyncio.get_running_loop()
