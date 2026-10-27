@@ -1,10 +1,12 @@
 """Tests for Climate.get_temperature_history and the Hive history API call."""
 
 # pylint: disable=too-few-public-methods
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from apyhiveapi.devices.heating import Climate
-from apyhiveapi.helper.hive_exceptions import HiveApiError
+from apyhiveapi.helper.hive_exceptions import HiveApiError, HiveAuthError
 from apyhiveapi.helper.hivedataclasses import Device, SessionConfig
 from apyhiveapi.helper.map import Map
 
@@ -15,16 +17,17 @@ _ROWS = [
 ]
 
 
-def _make_climate(parsed=None, file_mode=False, raise_api_error=False):
+def _make_climate(parsed=None, file_mode=False, side_effect=None, hive_type="heating"):
     session = MagicMock()
     session.data = Map(
         {"products": {"heat-1": {"type": "heating", "state": {}}}, "devices": {}}
     )
     session.config = SessionConfig()
     session.config.file = file_mode
+    session.hive_refresh_tokens = AsyncMock()
     session.api = MagicMock()
-    if raise_api_error:
-        session.api.get_heating_history = AsyncMock(side_effect=HiveApiError)
+    if side_effect is not None:
+        session.api.get_heating_history = AsyncMock(side_effect=side_effect)
     else:
         session.api.get_heating_history = AsyncMock(
             return_value={"original": _HTTP_OK, "parsed": parsed}
@@ -32,7 +35,7 @@ def _make_climate(parsed=None, file_mode=False, raise_api_error=False):
     device = Device(
         hive_id="heat-1",
         hive_name="Downstairs",
-        hive_type="heating",
+        hive_type=hive_type,
         ha_name="Downstairs",
         ha_type="climate",
         device_id="dev-1",
@@ -72,9 +75,26 @@ class TestGetTemperatureHistory:
             climate, device, _ = _make_climate(parsed)
             assert await climate.get_temperature_history(device, 1, 2) == []
 
-    async def test_empty_on_api_error(self):
-        climate, device, _ = _make_climate(raise_api_error=True)
+    @pytest.mark.parametrize("error", [HiveApiError, asyncio.TimeoutError])
+    async def test_empty_on_api_error_or_timeout(self, error):
+        climate, device, _ = _make_climate(side_effect=error)
         assert await climate.get_temperature_history(device, 1, 2) == []
+
+    async def test_auth_error_propagates(self):
+        climate, device, _ = _make_climate(side_effect=HiveAuthError("expired"))
+        with pytest.raises(HiveAuthError):
+            await climate.get_temperature_history(device, 1, 2)
+
+    async def test_refreshes_tokens_before_request(self):
+        climate, device, session = _make_climate({"data": []})
+        await climate.get_temperature_history(device, 1, 2)
+        session.hive_refresh_tokens.assert_awaited_once()
+
+    async def test_trv_zone_skipped_without_calling_api(self):
+        climate, device, session = _make_climate(hive_type="trvcontrol")
+        assert await climate.get_temperature_history(device, 1, 2) == []
+        session.hive_refresh_tokens.assert_not_awaited()
+        session.api.get_heating_history.assert_not_awaited()
 
     async def test_empty_in_file_mode_without_calling_api(self):
         climate, device, session = _make_climate(file_mode=True)

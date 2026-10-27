@@ -1,5 +1,6 @@
 """Hive Heating Module."""
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
@@ -7,7 +8,7 @@ from typing import Any
 from ..helper.compat_aliases import HeatingCompatMixin
 from ..helper.const import HIVETOHA
 from ..helper.device_handler_base import BaseDeviceHandler
-from ..helper.hive_exceptions import HiveApiError
+from ..helper.hive_exceptions import HiveApiError, HiveAuthError
 from ..helper.hivedataclasses import Device
 from .boost import BoostMixin
 
@@ -68,21 +69,32 @@ class HiveHeating(BoostMixin, BaseDeviceHandler):
 
         Returns:
             A list of ``{"date": <ms since epoch, int>, "temperature": <float>}``
-            sorted by date. Empty if Hive has no data or the request fails.
+            sorted by date. Empty if Hive has no data, the request fails or
+            times out, or the device is a TRV zone.
+
+        Raises:
+            HiveAuthError, NoApiToken: the session's credentials are no longer
+                valid. These propagate, as they do from ``update_data``, so the
+                caller can start a re-authentication.
 
         Hive averages readings within each bucket. The endpoint is only
-        known to work for ``heating`` zones; TRV zones return 404.
+        known to work for ``heating`` zones; TRV zones return 404, so they
+        are skipped without calling Hive.
         """
-        if self.session.config.file:
+        if self.session.config.file or device.hive_type == "trvcontrol":
             return []
+        await self.session.hive_refresh_tokens()
         try:
             resp = await self.session.api.get_heating_history(
                 device.hive_id, start, end, time_unit, rate
             )
-        except HiveApiError:
+        except HiveAuthError:
+            raise
+        except (HiveApiError, asyncio.TimeoutError) as exc:
             _LOGGER.warning(
-                "get_temperature_history - Hive returned no history for %s",
+                "get_temperature_history - no history for %s (%s)",
                 device.ha_name,
+                type(exc).__name__,
             )
             return []
         parsed = resp.get("parsed") if isinstance(resp, dict) else None
