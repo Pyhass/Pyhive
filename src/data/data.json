@@ -38,7 +38,7 @@
         "type": "sense",
         "sortOrder": 0,
         "created": 1343971266301,
-        "parent": "parent-0000-0000-0000-000000000001",
+        "parent": "hub-0000-0000-0000-000000000001",
         "props": {
           "online": true,
           "model": "SENSE",
