@@ -164,6 +164,36 @@ class HiveApi:
         url = self.urls["base"] + self.urls["actions"]
         return self._call_endpoint("GET", url)
 
+    def get_heating_history(
+        self,
+        node_id,
+        start,
+        end,
+        time_unit="HOURS",
+        rate=1,
+    ):
+        """Fetch temperature history for a heating product.
+
+        ``start`` and ``end`` are milliseconds since the Unix epoch. Hive
+        accepts ``time_unit`` of YEARS, DAYS, HOURS, MINUTES or SECONDS and
+        returns ``{"data": [{"date": "<ms>", "temperature": <float>}, ...]}``.
+        """
+        url = (
+            self.urls["base"]
+            + "/history/heating/"
+            + str(node_id)
+            + "?start="
+            + str(start)
+            + "&end="
+            + str(end)
+            + "&timeUnit="
+            + str(time_unit)
+            + "&rate="
+            + str(rate)
+            + "&operation=AVG"
+        )
+        return self._call_endpoint("GET", url)
+
     def motion_sensor(self, sensor, fromepoch, toepoch):
         """Call a way to get motion sensor info."""
         url = (
