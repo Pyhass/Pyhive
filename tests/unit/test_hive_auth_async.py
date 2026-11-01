@@ -1428,3 +1428,30 @@ class TestAsyncInitNoneGuard:
         with patch("asyncio.get_running_loop", return_value=mock_loop):
             with pytest.raises(HiveUnknownConfiguration):
                 await auth.async_init()
+
+
+class TestUsernameNormalisation:
+    """Hive's Cognito pool is case-sensitive; usernames are lower-cased."""
+
+    @pytest.mark.parametrize(
+        "typed",
+        ["User@Example.com", "USER@EXAMPLE.COM", "  user@example.com  "],
+    )
+    async def test_constructor_normalises_username(self, typed):
+        auth = await _make_auth(username=typed)
+        assert auth.username == "user@example.com"
+
+    async def test_reassignment_is_normalised(self):
+        """start_session reassigns auth.username from the HA config entry."""
+        auth = await _make_auth()
+        auth.username = "Someone@Example.com"
+        assert auth.username == "someone@example.com"
+
+    async def test_initiate_auth_sends_lowercase_username(self):
+        auth = await _make_auth(username="User@Example.com")
+        params = await auth.get_auth_params()
+        assert params["USERNAME"] == "user@example.com"
+
+    async def test_file_mode_detected_with_any_case(self):
+        auth = await _make_auth(username="Use@File.com")
+        assert auth.use_file is True
