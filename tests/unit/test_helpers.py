@@ -2,6 +2,7 @@
 
 # pylint: disable=protected-access
 
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -454,8 +455,18 @@ class TestGetDeviceData:
         """trvcontrol with an empty trvs list raises KeyError."""
         helper, _ = _make_helper()
         product = {"id": "trv-1", "type": "trvcontrol", "props": {"trvs": []}}
-        with pytest.raises(KeyError):
+        with pytest.raises(
+            KeyError, match="no TRVs linked to trvcontrol product trv-1"
+        ):
             helper.get_device_data(product)
+
+    def test_trvcontrol_no_trvs_does_not_log_error(self, caplog):
+        """The caller logs the skip once; the helper must not log a second ERROR."""
+        helper, _ = _make_helper()
+        product = {"id": "trv-1", "type": "trvcontrol", "props": {"trvs": []}}
+        with caplog.at_level(logging.DEBUG), pytest.raises(KeyError):
+            helper.get_device_data(product)
+        assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
 
     def test_trvcontrol_with_trv_returns_device(self):
         """trvcontrol with a valid TRV looks up the TRV device."""
@@ -527,7 +538,6 @@ class TestHiveHelperZoneMismatch:
 
     def test_trv_without_zone_does_not_log_warning(self, caplog):
         """TRV devices that omit 'zone' from props are silently skipped (no warning)."""
-        import logging
 
         helper, _ = _make_helper(
             devices={
