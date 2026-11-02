@@ -50,7 +50,7 @@ class DiscoveryMixin:
         Args:
             username: If ``"use@file.com"``, switches the session to file-based mode.
         """
-        if username == "use@file.com":
+        if username.strip().lower() == "use@file.com":
             self.config.file = True
 
     def add_list(self, entity_type: str, data: dict, **kwargs) -> Device | None:
