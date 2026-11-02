@@ -2,7 +2,8 @@
 
 # pylint: skip-file
 # ruff: noqa
-if __name__ == "pyhiveapi":  # pragma: no cover
+# TIM CODE - code generation appears not to fully implement the name change to pyhive - so allow for it
+if __name__ in ( "pyhiveapi", "pyhive"):  # pragma: no cover
     from .api.hive_api import HiveApi as API  # type: ignore[assignment]  # pragma: no cover
     from .api.hive_auth import HiveAuth as Auth  # type: ignore[assignment]  # pragma: no cover
 else:
