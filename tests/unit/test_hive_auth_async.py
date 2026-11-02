@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import botocore.exceptions
@@ -1229,6 +1230,32 @@ class TestDeviceLoginSuccessPath:
 
         mock_pdc.assert_called_once_with(initial_result["ChallengeParameters"])
         assert result is final_result
+
+    async def test_device_login_records_access_token_and_token_created(self):
+        """device_login() must store the tokens like login() and sms_2fa() do.
+
+        Otherwise get_device_data() reports token_created=None after a device
+        login and the session falls back to the epoch default, so every start
+        looks like an expired token (issue #123).
+        """
+        auth = await _make_auth(device_key="dk-abc", device_group_key="grp-abc")
+        auth.device_password = "dev-pass"  # pragma: allowlist secret
+        assert auth.token_created is None
+
+        initial_result = {"ChallengeParameters": {"USERNAME": "user@test.com"}}
+        final_result = {"AuthenticationResult": {"AccessToken": "device-access-token"}}
+
+        before = datetime.datetime.now()
+        with patch.object(auth, "process_device_challenge", new_callable=AsyncMock):
+            auth.loop.run_in_executor = AsyncMock(
+                side_effect=[initial_result, final_result]
+            )
+            await auth.device_login()
+
+        assert auth.access_token == "device-access-token"
+        assert isinstance(auth.token_created, datetime.datetime)
+        assert auth.token_created >= before
+        assert (await auth.get_device_data())[3] == auth.token_created
 
     async def test_device_login_calls_second_respond_to_auth_challenge(self):
         """Lines 367-375: second respond_to_auth_challenge is called with device challenge."""
