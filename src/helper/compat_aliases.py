@@ -60,6 +60,26 @@ class HeatingCompatMixin:
         """Backwards-compatible alias for get_schedule_now_next_later."""
         return await self.get_schedule_now_next_later(device)  # type: ignore[attr-defined]
 
+    async def getSchedule(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_schedule."""
+        return await self.get_schedule(device)  # type: ignore[attr-defined]
+
+    async def setSchedule(self, device: Device, schedule: dict):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for set_schedule."""
+        return await self.set_schedule(device, schedule)  # type: ignore[attr-defined]
+    async def getTemperatureHistory(  # pylint: disable=invalid-name
+        self,
+        device: Device,
+        start: int,
+        end: int,
+        time_unit: str = "HOURS",
+        rate: int = 1,
+    ):
+        """Backwards-compatible alias for get_temperature_history."""
+        return await self.get_temperature_history(  # type: ignore[attr-defined]
+            device, start, end, time_unit, rate
+        )
+
 
 class LightCompatMixin:
     """CamelCase aliases for Light public methods."""
@@ -115,6 +135,14 @@ class WaterHeaterCompatMixin:
     async def getScheduleNowNextLater(self, device: Device):  # pylint: disable=invalid-name
         """Backwards-compatible alias for get_schedule_now_next_later."""
         return await self.get_schedule_now_next_later(device)  # type: ignore[attr-defined]
+
+    async def getSchedule(self, device: Device):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for get_schedule."""
+        return await self.get_schedule(device)  # type: ignore[attr-defined]
+
+    async def setSchedule(self, device: Device, schedule: dict):  # pylint: disable=invalid-name
+        """Backwards-compatible alias for set_schedule."""
+        return await self.set_schedule(device, schedule)  # type: ignore[attr-defined]
 
     async def setMode(self, device: Device, new_mode: str):  # pylint: disable=invalid-name
         """Backwards-compatible alias for set_mode."""

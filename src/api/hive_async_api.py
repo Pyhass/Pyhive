@@ -165,6 +165,27 @@ class HiveApiAsync:
         )
         return await self._call_endpoint("get", url)
 
+    async def get_heating_history(
+        self,
+        node_id: str,
+        start: int,
+        end: int,
+        time_unit: str = "HOURS",
+        rate: int = 1,
+    ):
+        """Fetch temperature history for a heating product.
+
+        ``start`` and ``end`` are milliseconds since the Unix epoch. Hive
+        accepts ``time_unit`` of YEARS, DAYS, HOURS, MINUTES or SECONDS and
+        returns ``{"data": [{"date": "<ms>", "temperature": <float>}, ...]}``.
+        """
+        url = (
+            f"{self.base_url}/history/heating/{node_id}"
+            f"?start={start}&end={end}&timeUnit={time_unit}"
+            f"&rate={rate}&operation=AVG"
+        )
+        return await self._call_endpoint("get", url)
+
     async def get_weather(self, weather_url):
         """Call endpoint to get local weather from Hive API."""
         t_url = self.urls["weather"] + weather_url

@@ -8,11 +8,12 @@ from ..helper.const import HIVETOHA
 from ..helper.device_handler_base import BaseDeviceHandler
 from ..helper.hivedataclasses import Device
 from .boost import BoostMixin
+from .schedule import ScheduleMixin
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class HiveHotwater(BoostMixin, BaseDeviceHandler):
+class HiveHotwater(ScheduleMixin, BoostMixin, BaseDeviceHandler):
     """Hive Hotwater Code.
 
     Returns:

@@ -1279,3 +1279,16 @@ class TestProcessDeviceChallenge:
             response = auth.process_device_challenge(params)
 
         assert "SECRET_HASH" not in response
+
+
+class TestUsernameNormalisation:
+    """Hive's Cognito pool is case-sensitive; usernames are lower-cased."""
+
+    def test_constructor_normalises_username(self):
+        auth = _make_auth(username="  User@Example.COM ")
+        assert auth.username == "user@example.com"
+
+    def test_reassignment_is_normalised(self):
+        auth = _make_auth()
+        auth.username = "Someone@Example.com"
+        assert auth.username == "someone@example.com"
