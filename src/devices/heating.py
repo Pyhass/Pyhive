@@ -11,11 +11,12 @@ from ..helper.device_handler_base import BaseDeviceHandler
 from ..helper.hive_exceptions import HiveApiError, HiveAuthError
 from ..helper.hivedataclasses import Device
 from .boost import BoostMixin
+from .schedule import ScheduleMixin
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class HiveHeating(BoostMixin, BaseDeviceHandler):
+class HiveHeating(ScheduleMixin, BoostMixin, BaseDeviceHandler):
     """Hive Heating Code.
 
     Returns:
