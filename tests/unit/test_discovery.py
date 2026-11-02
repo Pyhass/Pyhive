@@ -2,6 +2,7 @@
 
 # pylint: disable=protected-access,attribute-defined-outside-init
 
+import logging
 from unittest.mock import MagicMock
 
 from apyhiveapi.helper.hivedataclasses import Device, SessionConfig
@@ -216,3 +217,43 @@ class TestAddList:
         data = {"id": "heat-1", "type": "heating"}
         device = d.add_list("climate", data)
         assert isinstance(device, Device)
+
+
+# ---------------------------------------------------------------------------
+# add_list error logging (home-assistant/core#172819: blank ERROR log entry)
+# ---------------------------------------------------------------------------
+
+
+class TestAddListErrorLogging:
+    """A skipped entity is logged with enough context to act on."""
+
+    def test_bare_keyerror_logs_non_blank_warning(self, caplog):
+        """A KeyError with no args previously produced an empty log message."""
+        d = _make_discovery()
+        d.helper.get_device_data.side_effect = KeyError()
+        with caplog.at_level(logging.WARNING):
+            result = d.add_list("climate", {"id": "trv-ctl-1", "type": "trvcontrol"})
+        assert result is None
+        (record,) = caplog.records
+        assert record.levelno == logging.WARNING
+        message = record.getMessage()
+        assert message.strip()
+        assert "climate" in message
+        assert "trvcontrol" in message
+        assert "trv-ctl-1" in message
+        assert "unknown key" in message
+
+    def test_keyerror_message_included(self, caplog):
+        d = _make_discovery()
+        d.helper.get_device_data.side_effect = KeyError("parent-0000")
+        with caplog.at_level(logging.WARNING):
+            d.add_list("binary_sensor", {"id": "sense-1", "type": "sense"})
+        assert "parent-0000" in caplog.records[0].getMessage()
+
+    def test_data_without_id_or_type(self, caplog):
+        d = _make_discovery()
+        d.helper.get_device_data.side_effect = KeyError("state")
+        with caplog.at_level(logging.WARNING):
+            d.add_list("sensor", {})
+        message = caplog.records[0].getMessage()
+        assert "device unknown" in message

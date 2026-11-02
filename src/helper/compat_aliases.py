@@ -67,6 +67,18 @@ class HeatingCompatMixin:
     async def setSchedule(self, device: Device, schedule: dict):  # pylint: disable=invalid-name
         """Backwards-compatible alias for set_schedule."""
         return await self.set_schedule(device, schedule)  # type: ignore[attr-defined]
+    async def getTemperatureHistory(  # pylint: disable=invalid-name
+        self,
+        device: Device,
+        start: int,
+        end: int,
+        time_unit: str = "HOURS",
+        rate: int = 1,
+    ):
+        """Backwards-compatible alias for get_temperature_history."""
+        return await self.get_temperature_history(  # type: ignore[attr-defined]
+            device, start, end, time_unit, rate
+        )
 
 
 class LightCompatMixin:

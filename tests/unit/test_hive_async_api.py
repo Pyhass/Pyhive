@@ -335,6 +335,37 @@ class TestMotionSensor:
 
 
 # ---------------------------------------------------------------------------
+# Tests: HiveApiAsync.get_heating_history
+# ---------------------------------------------------------------------------
+
+
+class TestGetHeatingHistory:
+    async def test_builds_history_url_with_query(self):
+        api = _make_api(status=200, json_data={"data": []})
+        captured = {}
+        original_request = api.request
+
+        async def capture_request(method, url, **kwargs):
+            captured["url"] = url
+            return await original_request(method, url, **kwargs)
+
+        api.request = capture_request
+        await api.get_heating_history("node-1", 1000, 2000, "DAYS", 3)
+        assert captured["url"] == (
+            api.base_url
+            + "/history/heating/node-1?start=1000&end=2000"
+            + "&timeUnit=DAYS&rate=3&operation=AVG"
+        )
+
+    async def test_defaults_and_returns_parsed_json(self):
+        payload = {"data": [{"date": "1", "temperature": 20.5}]}
+        api = _make_api(status=200, json_data=payload)
+        result = await api.get_heating_history("node-1", 1, 2)
+        assert result["original"] == 200
+        assert result["parsed"] == payload
+
+
+# ---------------------------------------------------------------------------
 # Tests: HiveApiAsync.error
 # ---------------------------------------------------------------------------
 
