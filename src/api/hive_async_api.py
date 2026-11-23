@@ -368,6 +368,64 @@ class HiveApiAsync:
 
         return self.json_return
 
+    async def get_holiday_mode(self):
+        """Get the current holiday mode configuration."""
+        json_return = {}
+        try:
+            resp = await self.request("get", self.urls["holiday_mode"])
+            json_return.update({"original": resp.status})
+            json_return.update({"parsed": await resp.json(content_type=None)})
+        except (OSError, RuntimeError, ZeroDivisionError):
+            await self.error()
+
+        return json_return
+
+    async def set_holiday_mode(self, start: int, end: int, temperature: float):
+        """Schedule holiday mode.
+
+        Args:
+            start: Start time as epoch milliseconds.
+            end: End time as epoch milliseconds.
+            temperature: Frost-protection temperature to hold during holiday mode.
+        """
+        _LOGGER.debug(
+            "set_holiday_mode - Scheduling holiday mode from %s to %s at %s°.",
+            start,
+            end,
+            temperature,
+        )
+        json_return = {}
+        jsc = json.dumps({"start": start, "end": end, "temperature": temperature})
+        try:
+            await self.isFileBeingUsed()
+            resp = await self.request("post", self.urls["holiday_mode"], data=jsc)
+            json_return.update({"original": resp.status})
+            json_return.update({"parsed": await resp.json(content_type=None)})
+        except (FileInUse, OSError, RuntimeError, ConnectionError) as e:
+            if e.__class__.__name__ == "FileInUse":
+                return {"original": "file"}
+            await self.error()
+
+        return json_return
+
+    async def cancel_holiday_mode(self):
+        """Cancel any scheduled or active holiday mode."""
+        _LOGGER.debug("cancel_holiday_mode - Cancelling holiday mode.")
+        json_return = {}
+        try:
+            await self.isFileBeingUsed()
+            resp = await self.request(
+                "delete", self.urls["holiday_mode"], data=json.dumps({})
+            )
+            json_return.update({"original": resp.status})
+            json_return.update({"parsed": await resp.json(content_type=None)})
+        except (FileInUse, OSError, RuntimeError, ConnectionError) as e:
+            if e.__class__.__name__ == "FileInUse":
+                return {"original": "file"}
+            await self.error()
+
+        return json_return
+
     async def error(self):
         """An error has occurred interacting with the Hive API."""
         _LOGGER.error("HTTP error occurred during Hive API interaction.")
