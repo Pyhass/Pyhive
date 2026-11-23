@@ -99,6 +99,10 @@ class HiveApi:
                 return requests.post(
                     url=url, headers=self.headers, data=jsc, timeout=self.timeout
                 )
+            if type == "DELETE":
+                return requests.delete(
+                    url=url, headers=self.headers, data=jsc, timeout=self.timeout
+                )
         except Exception as e:
             _LOGGER.error("Request failed: %s", e)
             raise
@@ -355,6 +359,67 @@ class HiveApi:
             self.json_return.update({"original": response.status_code})
             self.json_return.update({"parsed": response.json()})
         except (OSError, RuntimeError, ZeroDivisionError, ConnectionError):
+            self.error()
+
+        return self.json_return
+
+    def get_holiday_mode(self):
+        """Get the current holiday mode configuration."""
+        url = self.urls["base"] + self.urls["holiday_mode"]
+        try:
+            response = self.request("GET", url)
+            self.json_return.update({"original": response.status_code})
+            self.json_return.update({"parsed": response.json()})
+        except (
+            OSError,
+            RuntimeError,
+            ZeroDivisionError,
+            ConnectionError,
+            json.JSONDecodeError,
+        ):
+            self.error()
+
+        return self.json_return
+
+    def set_holiday_mode(self, start, end, temperature):
+        """Schedule holiday mode.
+
+        Args:
+            start: Start time as epoch milliseconds.
+            end: End time as epoch milliseconds.
+            temperature: Frost-protection temperature to hold during holiday mode.
+        """
+        jsc = json.dumps({"start": start, "end": end, "temperature": temperature})
+        url = self.urls["base"] + self.urls["holiday_mode"]
+        try:
+            response = self.request("POST", url, jsc)
+            self.json_return.update({"original": response.status_code})
+            self.json_return.update({"parsed": response.json()})
+        except (
+            OSError,
+            RuntimeError,
+            ZeroDivisionError,
+            ConnectionError,
+            json.JSONDecodeError,
+        ):
+            self.error()
+
+        return self.json_return
+
+    def cancel_holiday_mode(self):
+        """Cancel any scheduled or active holiday mode."""
+        url = self.urls["base"] + self.urls["holiday_mode"]
+        try:
+            response = self.request("DELETE", url, json.dumps({}))
+            self.json_return.update({"original": response.status_code})
+            self.json_return.update({"parsed": response.json()})
+        except (
+            OSError,
+            RuntimeError,
+            ZeroDivisionError,
+            ConnectionError,
+            json.JSONDecodeError,
+        ):
             self.error()
 
         return self.json_return
